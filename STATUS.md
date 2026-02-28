@@ -18,13 +18,19 @@
 
 ### Audio source separation (`flucoma_rs::decomposition`)
 
-- [x] [`AudioTransport`](https://learn.flucoma.org/reference/audiotransport) as `flucoma_rs::decomposition::AudioTransport` -- optimal-transport spectral morphing
 - [ ] [`HPSS`](https://learn.flucoma.org/reference/hpss) -- Harmonic-Percussive Source Separation
 - [ ] [`SineExtraction`](https://learn.flucoma.org/reference/sines) -- sinusoids + residual decomposition
 - [ ] [`TransientExtraction`](https://learn.flucoma.org/reference/transients) -- transient + residual decomposition
 - [ ] [`NMF`](https://learn.flucoma.org/learn/bufnmf/) -- Non-negative Matrix Factorization
 - [ ] [`NMFCross`](https://learn.flucoma.org/reference/bufnmfcross/) -- cross-synthesis via NMF
 - [ ] [`NMFMorph`](https://learn.flucoma.org/reference/nmfmorph/) -- NMF-based spectral morphing
+
+### Audio transformation (`flucoma_rs::transformation`)
+
+- [x] [`AudioTransport`](https://learn.flucoma.org/reference/audiotransport) as `flucoma_rs::decomposition::AudioTransport` -- optimal-transport spectral morphing
+- [ ] [`BufNMFCross`](https://learn.flucoma.org/reference/bufnmfcross/) -- resynthesis of targets using a source's spectral bases
+- [ ] [`NMFFilter`](https://learn.flucoma.org/reference/nmffilter/) -- resynthesises a signal against a set of spectral templates
+- [ ] [`NMFMorph`](https://learn.flucoma.org/reference/nmfmorph/) -- cross-synthesis using non-negative Matrix Factorisation
 
 ### Audio slicing (`flucoma_rs::segmentation`)
 

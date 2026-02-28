@@ -10,7 +10,7 @@
 use std::error::Error;
 
 use arg::{parse_args, Args};
-use flucoma_rs::decomposition::AudioTransport;
+use flucoma_rs::transformation::AudioTransport;
 use wavers::Wav;
 
 // -------------------------------------------------------------------------------------------------
