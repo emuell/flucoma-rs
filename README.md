@@ -23,22 +23,25 @@ See [EXTEND.md](./EXTEND.md) on how to create new wrappers. Pull requests are we
 
 ### `unique-slices` -- deduplicated onset slicer
 
-Detects onsets in an audio file, computes a mean mel-band vector per slice, and writes up to N timbrally unique slices as individual WAV files. Slices that are too similar to an already-kept slice are skipped.
+Detects onsets in an audio file, computes a mean mel-band vector per slice, and writes timbrally unique slices as individual WAV files. Slices that are too similar to an already-kept slice are skipped.
 
 ```sh
-cargo run --example unique-slices -- input.wav [topN]
+cargo run --example unique-slices -- input.wav
 ```
 
 Output: `<input_stem>_slices/slice1_<start>_<end>.wav`, etc.
 
-### `audio-transport` -- spectral crossfade
+### `transform` -- spectral crossfade
 
-Morphs two audio files together using [optimal-transport](https://learn.flucoma.org/reference/audiotransport/) spectral interpolation, sweeping linearly from file 1 to file 2.
+Morphs two audio files together using spectral interpolation, sweeping linearly from file 1 to file 2. Two modes:
+
+- `transport` (default) -- [optimal-transport](https://learn.flucoma.org/reference/audiotransport/) spectral morphing
+- `morph` -- [NMF](https://learn.flucoma.org/reference/nmfmorph/)-based component morphing
 
 ```sh
-cargo run --example audio-transport -- input1.wav input2.wav output.wav
+cargo run --example transform -- input1.wav input2.wav output.wav
+cargo run --example transform -- --mode morph input1.wav input2.wav output.wav
 ```
-
 
 ## API Usage Examples
 
