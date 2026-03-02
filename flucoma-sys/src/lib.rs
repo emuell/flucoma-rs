@@ -4,7 +4,6 @@
 ///
 /// All handles are opaque `*mut u8` pointers. Do not use these functions
 /// directly -- use the safe wrappers in the `flucoma-rs` crate instead.
-
 use cpp::cpp;
 
 /// Signed index type matching `ptrdiff_t` used by flucoma-core.
@@ -21,10 +20,12 @@ cpp! {{
     #include <flucoma/algorithms/public/MelBands.hpp>
     #include <flucoma/algorithms/public/OnsetDetectionFunctions.hpp>
     #include <flucoma/algorithms/public/OnsetSegmentation.hpp>
+    #include <flucoma/algorithms/public/AudioTransport.hpp>
+    #include <flucoma/algorithms/public/NMF.hpp>
+    #include <flucoma/algorithms/public/NMFMorph.hpp>
     #include <flucoma/algorithms/public/EnvelopeSegmentation.hpp>
     #include <flucoma/algorithms/public/NoveltySegmentation.hpp>
     #include <flucoma/algorithms/public/TransientSegmentation.hpp>
-    #include <flucoma/algorithms/public/AudioTransport.hpp>
     using namespace fluid;
     using namespace fluid::algorithm;
 }}
@@ -240,6 +241,245 @@ pub fn melbands_process_frame(
             FluidTensorView<double, 1> out_v(output, 0, output_len);
             Allocator alloc{};
             ptr->processFrame(in_v, out_v, mag_norm, use_power, log_output, alloc);
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// AudioTransport
+
+pub fn audio_transport_create(max_fft_size: FlucomaIndex) -> *mut u8 {
+    unsafe {
+        cpp!([max_fft_size as "ptrdiff_t"] -> *mut u8 as "void*" {
+            Allocator alloc{};
+            return static_cast<void*>(new AudioTransport(max_fft_size, alloc));
+        })
+    }
+}
+
+pub fn audio_transport_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "AudioTransport*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn audio_transport_init(
+    ptr: *mut u8,
+    window_size: FlucomaIndex,
+    fft_size: FlucomaIndex,
+    hop_size: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "AudioTransport*",
+            window_size as "ptrdiff_t", fft_size as "ptrdiff_t", hop_size as "ptrdiff_t"
+        ] {
+            ptr->init(window_size, fft_size, hop_size);
+        })
+    }
+}
+
+/// Fills `output` (length = 2 * frame_len): first half is interpolated audio,
+/// second half is the squared window for overlap-add normalization.
+pub fn audio_transport_process_frame(
+    ptr: *mut u8,
+    in1: *const f64,
+    in2: *const f64,
+    frame_len: FlucomaIndex,
+    weight: f64,
+    output: *mut f64,
+) {
+    unsafe {
+        cpp!([
+            ptr as "AudioTransport*",
+            in1 as "const double*", in2 as "const double*",
+            frame_len as "ptrdiff_t",
+            weight as "double",
+            output as "double*"
+        ] {
+            FluidTensorView<double, 1> in1_v(const_cast<double*>(in1), 0, frame_len);
+            FluidTensorView<double, 1> in2_v(const_cast<double*>(in2), 0, frame_len);
+            FluidTensorView<double, 2> out_v(output, 0, 2, frame_len);
+            Allocator alloc{};
+            ptr->processFrame(in1_v, in2_v, weight, out_v, alloc);
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// NMF (used by NMFFilter)
+
+pub fn nmf_create() -> *mut u8 {
+    unsafe {
+        cpp!([] -> *mut u8 as "void*" {
+            return static_cast<void*>(new NMF());
+        })
+    }
+}
+
+pub fn nmf_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "NMF*"] {
+            delete ptr;
+        })
+    }
+}
+
+/// Offline batch NMF decomposition of a full magnitude spectrogram.
+///
+/// - `x`    : input spectrogram, flat row-major `n_frames × n_bins`
+/// - `w1`   : output bases,      flat row-major `rank × n_bins`
+/// - `h1`   : output activations, flat row-major `n_frames × rank`
+/// - `v1`   : output reconstruction, flat row-major `n_frames × n_bins`
+pub fn nmf_process(
+    ptr: *mut u8,
+    x: *const f64,
+    n_frames: FlucomaIndex,
+    n_bins: FlucomaIndex,
+    w1: *mut f64,
+    h1: *mut f64,
+    v1: *mut f64,
+    rank: FlucomaIndex,
+    n_iterations: FlucomaIndex,
+    update_w: bool,
+    update_h: bool,
+    random_seed: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "NMF*",
+            x  as "const double*", n_frames as "ptrdiff_t", n_bins as "ptrdiff_t",
+            w1 as "double*", h1 as "double*", v1 as "double*",
+            rank as "ptrdiff_t", n_iterations as "ptrdiff_t",
+            update_w as "bool", update_h as "bool", random_seed as "ptrdiff_t"
+        ] {
+            FluidTensorView<double, 2> x_v (const_cast<double*>(x),  0, n_frames, n_bins);
+            FluidTensorView<double, 2> w1_v(w1,                      0, rank,     n_bins);
+            FluidTensorView<double, 2> h1_v(h1,                      0, n_frames, rank);
+            FluidTensorView<double, 2> v1_v(v1,                      0, n_frames, n_bins);
+            ptr->process(x_v, w1_v, h1_v, v1_v, rank, n_iterations, update_w,
+                         update_h, random_seed);
+        })
+    }
+}
+
+/// Compute NMF activations for one magnitude-spectrum frame against a fixed dictionary.
+///
+/// - `input`    : magnitude spectrum, length `input_len` (= nBins)
+/// - `bases`    : flat row-major bases matrix, `bases_rows` × `bases_cols` (rank × nBins)
+/// - `output`   : activation vector, length `bases_rows` (= rank)
+/// - `estimate` : reconstructed magnitude estimate, length `input_len`
+pub fn nmf_process_frame(
+    ptr: *mut u8,
+    input: *const f64,
+    input_len: FlucomaIndex,
+    bases: *const f64,
+    bases_rows: FlucomaIndex,
+    bases_cols: FlucomaIndex,
+    output: *mut f64,
+    estimate: *mut f64,
+    n_iterations: FlucomaIndex,
+    random_seed: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "NMF*",
+            input as "const double*", input_len as "ptrdiff_t",
+            bases as "const double*", bases_rows as "ptrdiff_t", bases_cols as "ptrdiff_t",
+            output as "double*",
+            estimate as "double*",
+            n_iterations as "ptrdiff_t",
+            random_seed as "ptrdiff_t"
+        ] {
+            FluidTensorView<double, 1> x_v(const_cast<double*>(input), 0, input_len);
+            FluidTensorView<double, 2> w_v(const_cast<double*>(bases), 0, bases_rows, bases_cols);
+            FluidTensorView<double, 1> out_v(output, 0, bases_rows);
+            FluidTensorView<double, 1> est_v(estimate, 0, input_len);
+            Allocator alloc{};
+            ptr->processFrame(x_v, w_v, out_v, n_iterations, est_v, random_seed, alloc);
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// NMFMorph
+
+pub fn nmf_morph_create(max_fft_size: FlucomaIndex) -> *mut u8 {
+    unsafe {
+        cpp!([max_fft_size as "ptrdiff_t"] -> *mut u8 as "void*" {
+            Allocator alloc{};
+            return static_cast<void*>(new NMFMorph(max_fft_size, alloc));
+        })
+    }
+}
+
+pub fn nmf_morph_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "NMFMorph*"] {
+            delete ptr;
+        })
+    }
+}
+
+/// Initialise the morph with two sets of NMF bases (W1, W2) and activations (H).
+/// All matrices are flat row-major: W1 and W2 are `rank × n_bins`, H is `rank × n_frames`.
+#[allow(clippy::too_many_arguments)]
+pub fn nmf_morph_init(
+    ptr: *mut u8,
+    w1: *const f64,
+    w1_rows: FlucomaIndex,
+    w1_cols: FlucomaIndex,
+    w2: *const f64,
+    w2_rows: FlucomaIndex,
+    w2_cols: FlucomaIndex,
+    h: *const f64,
+    h_rows: FlucomaIndex,
+    h_cols: FlucomaIndex,
+    win_size: FlucomaIndex,
+    fft_size: FlucomaIndex,
+    hop_size: FlucomaIndex,
+    assign: bool,
+) {
+    unsafe {
+        cpp!([
+            ptr as "NMFMorph*",
+            w1 as "const double*", w1_rows as "ptrdiff_t", w1_cols as "ptrdiff_t",
+            w2 as "const double*", w2_rows as "ptrdiff_t", w2_cols as "ptrdiff_t",
+            h  as "const double*", h_rows  as "ptrdiff_t", h_cols  as "ptrdiff_t",
+            win_size as "ptrdiff_t", fft_size as "ptrdiff_t", hop_size as "ptrdiff_t",
+            assign as "bool"
+        ] {
+            FluidTensorView<double, 2> w1_v(const_cast<double*>(w1), 0, w1_rows, w1_cols);
+            FluidTensorView<double, 2> w2_v(const_cast<double*>(w2), 0, w2_rows, w2_cols);
+            FluidTensorView<double, 2> h_v (const_cast<double*>(h),  0, h_rows,  h_cols);
+            Allocator alloc{};
+            ptr->init(w1_v, w2_v, h_v, win_size, fft_size, hop_size, assign, alloc);
+        })
+    }
+}
+
+/// Generate one morphed complex spectrum frame.
+/// `out_complex`: interleaved [re0, im0, re1, im1, ...], length = 2 * num_bins.
+pub fn nmf_morph_process_frame(
+    ptr: *mut u8,
+    out_complex: *mut f64,
+    num_bins: FlucomaIndex,
+    interpolation: f64,
+    seed: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "NMFMorph*",
+            out_complex as "double*", num_bins as "ptrdiff_t",
+            interpolation as "double",
+            seed as "ptrdiff_t"
+        ] {
+            auto* cptr = reinterpret_cast<std::complex<double>*>(out_complex);
+            FluidTensorView<std::complex<double>, 1> v(cptr, 0, num_bins);
+            Allocator alloc{};
+            ptr->processFrame(v, interpolation, seed, alloc);
         })
     }
 }
@@ -589,69 +829,6 @@ pub fn transient_seg_input_size(ptr: *mut u8) -> FlucomaIndex {
     unsafe {
         cpp!([ptr as "TransientSegmentation*"] -> FlucomaIndex as "ptrdiff_t" {
             return ptr->inputSize();
-        })
-    }
-}
-
-// -------------------------------------------------------------------------------------------------
-// AudioTransport
-
-pub fn audio_transport_create(max_fft_size: FlucomaIndex) -> *mut u8 {
-    unsafe {
-        cpp!([max_fft_size as "ptrdiff_t"] -> *mut u8 as "void*" {
-            Allocator alloc{};
-            return static_cast<void*>(new AudioTransport(max_fft_size, alloc));
-        })
-    }
-}
-
-pub fn audio_transport_destroy(ptr: *mut u8) {
-    unsafe {
-        cpp!([ptr as "AudioTransport*"] {
-            delete ptr;
-        })
-    }
-}
-
-pub fn audio_transport_init(
-    ptr: *mut u8,
-    window_size: FlucomaIndex,
-    fft_size: FlucomaIndex,
-    hop_size: FlucomaIndex,
-) {
-    unsafe {
-        cpp!([
-            ptr as "AudioTransport*",
-            window_size as "ptrdiff_t", fft_size as "ptrdiff_t", hop_size as "ptrdiff_t"
-        ] {
-            ptr->init(window_size, fft_size, hop_size);
-        })
-    }
-}
-
-/// Fills `output` (length = 2 * frame_len): first half is interpolated audio,
-/// second half is the squared window for overlap-add normalization.
-pub fn audio_transport_process_frame(
-    ptr: *mut u8,
-    in1: *const f64,
-    in2: *const f64,
-    frame_len: FlucomaIndex,
-    weight: f64,
-    output: *mut f64,
-) {
-    unsafe {
-        cpp!([
-            ptr as "AudioTransport*",
-            in1 as "const double*", in2 as "const double*",
-            frame_len as "ptrdiff_t",
-            weight as "double",
-            output as "double*"
-        ] {
-            FluidTensorView<double, 1> in1_v(const_cast<double*>(in1), 0, frame_len);
-            FluidTensorView<double, 1> in2_v(const_cast<double*>(in2), 0, frame_len);
-            FluidTensorView<double, 2> out_v(output, 0, 2, frame_len);
-            Allocator alloc{};
-            ptr->processFrame(in1_v, in2_v, weight, out_v, alloc);
         })
     }
 }

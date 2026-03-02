@@ -5,6 +5,8 @@ mod audio_transport;
 mod envelope_seg;
 mod loudness;
 mod mel_bands;
+mod nmf_filter;
+mod nmf_morph;
 mod novelty_seg;
 mod onset;
 mod onset_seg;
@@ -20,6 +22,8 @@ pub mod analyzation {
 
 pub mod transformation {
     pub use super::audio_transport::AudioTransport;
+    pub use super::nmf_filter::NMFFilter;
+    pub use super::nmf_morph::NMFMorph;
 }
 
 pub mod segmentation {
