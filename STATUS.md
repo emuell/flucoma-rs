@@ -4,9 +4,7 @@
 
 - [x] [`Loudness`](https://learn.flucoma.org/reference/loudness) as `flucoma_rs::analyzation::Loudness` -- EBU R128-style loudness + peak per frame
 - [x] [`MelBands`](https://learn.flucoma.org/reference/melbands) as `flucoma_rs::analyzation::MelBands` -- mel-scaled filter bank (magnitude -> band energies)
-- [x] [`OnsetDetectionFunctions`](https://learn.flucoma.org/reference/onsetfeature) as `flucoma_rs::analyzation::OnsetDetectionFunctions` -- 10 spectral-difference onset detection functions
-- [x] [`STFT`](https://learn.flucoma.org/learn/fourier-transform/) as `flucoma_rs::analyzation::Stft` -- frame-by-frame Short-Time Fourier Transform
-- [x] [`ISTFT`](https://learn.flucoma.org/learn/fourier-transform/) as `flucoma_rs::analyzation::Istft` -- inverse STFT, complex spectrum -> audio
+- [x] [`Onset`](https://learn.flucoma.org/reference/onsetfeature) as `flucoma_rs::analyzation::Onset` -- 10 spectral-difference onset detection functions
 - [ ] [`SpectralShape`](https://learn.flucoma.org/reference/spectralshape) -- 7 shape descriptors: centroid, spread, skewness, kurtosis, rolloff, flatness, crest
 - [ ] [`ChromaFilterBank`](https://learn.flucoma.org/reference/chroma) -- chroma (pitch-class) filter bank
 - [ ] [`DCT`](https://learn.flucoma.org/reference/dct) -- Discrete Cosine Transform
@@ -56,3 +54,8 @@
 - [ ] [`PCA`](https://learn.flucoma.org/reference/pca) -- Principal Component Analysis
 - [ ] [`MDS`](https://learn.flucoma.org/reference/mds) -- Multidimensional Scaling
 - [ ] [`UMAP`](https://learn.flucoma.org/reference/umap) -- UMAP dimensionality reduction
+
+### Fourier Transform (`flucoma_rs::fourier`)
+
+- [x] [`STFT`](https://learn.flucoma.org/learn/fourier-transform/) as `flucoma_rs::fourier::Stft` -- frame-by-frame Short-Time Fourier Transform
+- [x] [`ISTFT`](https://learn.flucoma.org/learn/fourier-transform/) as `flucoma_rs::fourier::Istft` -- inverse STFT, complex spectrum -> audio
