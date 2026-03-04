@@ -12,7 +12,7 @@
 		"program": "$ZED_WORKTREE_ROOT/target/debug/examples/transform",
 		"args": [
 			"--mode",
-			"morph", // or "transport"
+			"transport", // or "morph"
 			"$ZED_WORKTREE_ROOT/vendor/flucoma-core/Resources/AudioFiles/Olencki-TenTromboneLongTones-M.wav",
 			"$ZED_WORKTREE_ROOT/vendor/flucoma-core/Resources/AudioFiles/Tremblay-SlideChoirAdd-M.wav",
 			"$ZED_WORKTREE_ROOT/target/transform-result.wav"

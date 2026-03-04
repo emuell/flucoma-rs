@@ -12,7 +12,8 @@
 use std::{error::Error, fs::File, path::Path};
 
 use flucoma_rs::{
-    analyzation::{MelBands, OnsetFunction, Stft, WindowType},
+    analyzation::{MelBands, OnsetFunction},
+    fourier::{Stft, WindowType},
     segmentation::OnsetSegmentation,
 };
 
