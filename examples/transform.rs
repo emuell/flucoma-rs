@@ -16,6 +16,7 @@ use std::{error::Error, fs::File};
 
 use arg::{parse_args, Args};
 use flucoma_rs::{
+    data::Matrix,
     fourier::{ComplexSpectrum, Istft, Stft, WindowType},
     transformation::{AudioTransport, NMFFilter, NMFMorph},
 };
@@ -23,13 +24,13 @@ use flucoma_rs::{
 // -------------------------------------------------------------------------------------------------
 
 // Shared STFT config
-const WINDOW_SIZE: usize = 1024;
+const WINDOW_SIZE: usize = 4096;
 const FFT_SIZE: usize = 4096;
 const HOP_SIZE: usize = WINDOW_SIZE / 2;
 
 // NMF config (morph mode only)
 const NMF_RANK: usize = 8;
-const NMF_ITERATIONS: usize = 10;
+const NMF_ITERATIONS: usize = 100;
 
 // -------------------------------------------------------------------------------------------------
 
@@ -194,12 +195,12 @@ fn run_transport(
             extract_window(&samples1[channel], start, &mut frame_buffer1);
             extract_window(&samples2[channel], start, &mut frame_buffer2);
 
-            let (audio, window_square) =
+            let (audio, norm_window) =
                 morphers[channel].process_frame(&frame_buffer1, &frame_buffer2, weight);
 
             for i in 0..WINDOW_SIZE {
                 audio_acc[channel][start + i] += audio[i];
-                norm_acc[channel][start + i] += window_square[i];
+                norm_acc[channel][start + i] += norm_window[i];
             }
         }
     }
@@ -228,10 +229,10 @@ fn run_nmf_morph(
         .map(|_| Stft::new(WINDOW_SIZE, FFT_SIZE, HOP_SIZE, WindowType::Hann))
         .collect::<Result<_, _>>()?;
 
-    // Build magnitude spectrograms for both sources
-    let mut spec1 = vec![vec![0.0f64; total_hops * bin_count]; channel_count];
-    let mut spec2 = vec![vec![0.0f64; total_hops * bin_count]; channel_count];
+    // Build magnitude spectrograms for both sources (n_frames × n_bins, row-major)
     let mut frame_buffer = vec![0.0f64; WINDOW_SIZE];
+    let mut spec1_data = vec![vec![0.0f64; total_hops * bin_count]; channel_count];
+    let mut spec2_data = vec![vec![0.0f64; total_hops * bin_count]; channel_count];
 
     for hop in 0..total_hops {
         let start = hop * HOP_SIZE;
@@ -239,13 +240,13 @@ fn run_nmf_morph(
             extract_window(&samples1[channel], start, &mut frame_buffer);
             let s = stfts1[channel].process_frame(&frame_buffer);
             for bin in 0..bin_count {
-                spec1[channel][hop * bin_count + bin] = s.bins[bin].norm();
+                spec1_data[channel][hop * bin_count + bin] = s.bins[bin].norm();
             }
 
             extract_window(&samples2[channel], start, &mut frame_buffer);
             let s = stfts2[channel].process_frame(&frame_buffer);
             for bin in 0..bin_count {
-                spec2[channel][hop * bin_count + bin] = s.bins[bin].norm();
+                spec2_data[channel][hop * bin_count + bin] = s.bins[bin].norm();
             }
         }
     }
@@ -264,37 +265,20 @@ fn run_nmf_morph(
         .collect::<Result<_, _>>()?;
 
     for channel in 0..channel_count {
-        let (w1, h1, _) = nmf.process(
-            &spec1[channel],
-            total_hops,
-            bin_count,
-            NMF_RANK,
-            NMF_ITERATIONS,
-            -1,
-        );
-        let (w2, _, _) = nmf.process(
-            &spec2[channel],
-            total_hops,
-            bin_count,
-            NMF_RANK,
-            NMF_ITERATIONS,
-            -1,
-        );
+        let spec1 = Matrix::from_vec(spec1_data[channel].clone(), total_hops, bin_count).unwrap();
+        let spec2 = Matrix::from_vec(spec2_data[channel].clone(), total_hops, bin_count).unwrap();
 
-        // NMF::process returns H as n_frames × rank (row-major).
-        // NMFMorph::init expects H as rank × n_frames (columns = frames).
-        let h1_t = transpose(&h1, total_hops, NMF_RANK);
+        let res1 = nmf.process(&spec1, NMF_RANK, NMF_ITERATIONS, -1);
+        let res2 = nmf.process(&spec2, NMF_RANK, NMF_ITERATIONS, -1);
+
+        // NMFFilter::process returns activations as n_frames × rank.
+        // NMFMorph::init expects H as rank × n_frames — transpose it.
+        let h1_t = res1.activations.transpose();
 
         morphers[channel].init(
-            &w1,
-            NMF_RANK,
-            bin_count,
-            &w2,
-            NMF_RANK,
-            bin_count,
+            &res1.bases,
+            &res2.bases,
             &h1_t,
-            NMF_RANK,
-            total_hops,
             WINDOW_SIZE,
             FFT_SIZE,
             HOP_SIZE,
@@ -305,21 +289,13 @@ fn run_nmf_morph(
     println!("  Synthesising morphed output...");
 
     // ISTFT window_size = FFT_SIZE, so output frame is FFT_SIZE samples.
-    // Normalisation window = analysis_window * synthesis_window.
-    // Analysis STFT uses Hann of WINDOW_SIZE; ISTFT applies Hann of FFT_SIZE.
-    // IFFT(FFT(Hann_W * x))[n] == Hann_W[n]*x[n] for n < WINDOW_SIZE, 0 otherwise,
-    // so only the first WINDOW_SIZE positions carry the signal.
     let mut audio_frame = vec![0.0f64; FFT_SIZE];
-    let window_square: Vec<f64> = (0..FFT_SIZE)
+    // Periodic Hann window — matches FluCoMa's synthesis window
+    let norm_window: Vec<f64> = (0..FFT_SIZE)
         .map(|i| {
             use std::f64::consts::PI;
-            if i < WINDOW_SIZE {
-                let w_win = (PI * i as f64 / (WINDOW_SIZE - 1) as f64).sin();
-                let w_fft = (PI * i as f64 / (FFT_SIZE - 1) as f64).sin();
-                w_win * w_fft
-            } else {
-                0.0
-            }
+            let hann = 0.5 * (1.0 - (2.0 * PI * i as f64 / FFT_SIZE as f64).cos());
+            hann * hann
         })
         .collect();
 
@@ -334,7 +310,7 @@ fn run_nmf_morph(
 
             for i in 0..FFT_SIZE {
                 audio_acc[channel][start + i] += audio_frame[i];
-                norm_acc[channel][start + i] += window_square[i];
+                norm_acc[channel][start + i] += norm_window[i];
             }
         }
     }
@@ -364,15 +340,4 @@ fn extract_window(src: &[f64], start: usize, dst: &mut [f64]) {
             0.0
         };
     }
-}
-
-/// Transpose a flat row-major matrix from `rows × cols` to `cols × rows`.
-fn transpose(matrix: &[f64], rows: usize, cols: usize) -> Vec<f64> {
-    let mut out = vec![0.0f64; rows * cols];
-    for r in 0..rows {
-        for c in 0..cols {
-            out[c * rows + r] = matrix[r * cols + c];
-        }
-    }
-    out
 }

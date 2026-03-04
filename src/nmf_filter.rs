@@ -1,5 +1,19 @@
 use flucoma_sys::{nmf_create, nmf_destroy, nmf_process, nmf_process_frame};
 
+use crate::matrix::Matrix;
+
+// -------------------------------------------------------------------------------------------------
+
+/// Result of an offline NMF batch decomposition via [`NMFFilter::process`].
+pub struct NmfResult {
+    /// Bases matrix W, shape `rank × n_bins`.
+    pub bases: Matrix,
+    /// Activations matrix H, shape `n_frames × rank`.
+    pub activations: Matrix,
+    /// Reconstruction matrix V ≈ H · W, shape `n_frames × n_bins`.
+    pub estimate: Matrix,
+}
+
 // -------------------------------------------------------------------------------------------------
 
 /// Real-time NMF filtering: compute per-frame activations of a fixed spectral dictionary.
@@ -52,10 +66,10 @@ impl NMFFilter {
     /// Process one magnitude-spectrum frame against a fixed bases matrix.
     ///
     /// # Arguments
-    /// * `magnitudes`  - Magnitude spectrum of length `n_bins`.
-    /// * `bases`       - Row-major bases matrix, `rank × n_bins`. Length must equal `rank * n_bins`.
-    /// * `n_iterations`- Number of multiplicative-update NMF iterations (≥ 1).
-    /// * `random_seed` - Seed for random initialisation of activations. Use -1 for random.
+    /// * `magnitudes`   - Magnitude spectrum of length `n_bins`.
+    /// * `bases`        - Bases matrix of shape `rank × n_bins`.
+    /// * `n_iterations` - Number of multiplicative-update NMF iterations (≥ 1).
+    /// * `random_seed`  - Seed for random initialisation of activations. Use -1 for random.
     ///
     /// Returns `(activations, estimate)`:
     /// - `activations`: length `rank` — how strongly each basis is active this frame.
@@ -64,11 +78,11 @@ impl NMFFilter {
     /// Both slices are backed by an internal buffer valid until the next call.
     ///
     /// # Panics
-    /// Panics if `magnitudes.len() != n_bins` or `bases.len() != rank * n_bins`.
+    /// Panics if `magnitudes.len() != n_bins`, or `bases` shape is not `rank × n_bins`.
     pub fn process_frame<'a>(
         &'a mut self,
         magnitudes: &[f64],
-        bases: &[f64],
+        bases: &Matrix,
         n_iterations: usize,
         random_seed: i64,
     ) -> (&'a [f64], &'a [f64]) {
@@ -80,18 +94,25 @@ impl NMFFilter {
             self.n_bins
         );
         assert_eq!(
-            bases.len(),
-            self.rank * self.n_bins,
-            "bases length ({}) must equal rank * n_bins ({})",
-            bases.len(),
-            self.rank * self.n_bins
+            bases.rows(),
+            self.rank,
+            "bases rows ({}) must equal rank ({})",
+            bases.rows(),
+            self.rank
+        );
+        assert_eq!(
+            bases.cols(),
+            self.n_bins,
+            "bases cols ({}) must equal n_bins ({})",
+            bases.cols(),
+            self.n_bins
         );
         let n_iter = n_iterations.max(1) as isize;
         nmf_process_frame(
             self.inner,
             magnitudes.as_ptr(),
             self.n_bins as isize,
-            bases.as_ptr(),
+            bases.data().as_ptr(),
             self.rank as isize,
             self.n_bins as isize,
             self.buf.as_mut_ptr(),
@@ -105,47 +126,38 @@ impl NMFFilter {
 
     /// Offline batch NMF decomposition of a full magnitude spectrogram.
     ///
-    /// Factorises `spectrogram` (shape `n_frames × n_bins`, flat row-major) into
-    /// bases W and activations H using `rank` components.
+    /// Factorises `spectrogram` (shape `n_frames × n_bins`) into bases W and
+    /// activations H using `rank` components.
     ///
     /// # Arguments
-    /// * `spectrogram`  - Flat row-major magnitude spectrogram, length `n_frames * n_bins`.
-    /// * `n_frames`     - Number of STFT frames.
-    /// * `n_bins`       - Number of magnitude bins per frame.
+    /// * `spectrogram`  - Row-major magnitude spectrogram, shape `n_frames × n_bins`.
     /// * `rank`         - Number of NMF components (> 0).
     /// * `n_iterations` - Number of multiplicative-update iterations.
     /// * `random_seed`  - Seed for random initialisation. Use -1 for random.
     ///
-    /// Returns `(w, h, v)`:
-    /// - `w`: bases matrix, flat row-major `rank × n_bins`.
-    /// - `h`: activations matrix, flat row-major `n_frames × rank`.
-    /// - `v`: reconstruction matrix, flat row-major `n_frames × n_bins`.
+    /// Returns an [`NmfResult`] whose matrices have shapes:
+    /// - `bases`:       `rank × n_bins`
+    /// - `activations`: `n_frames × rank`
+    /// - `estimate`:    `n_frames × n_bins`
     ///
     /// # Panics
-    /// Panics if `spectrogram.len() != n_frames * n_bins` or `rank == 0`.
+    /// Panics if `rank == 0`.
     pub fn process(
         &mut self,
-        spectrogram: &[f64],
-        n_frames: usize,
-        n_bins: usize,
+        spectrogram: &Matrix,
         rank: usize,
         n_iterations: usize,
         random_seed: i64,
-    ) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
-        assert_eq!(
-            spectrogram.len(),
-            n_frames * n_bins,
-            "spectrogram length ({}) must equal n_frames * n_bins ({})",
-            spectrogram.len(),
-            n_frames * n_bins
-        );
+    ) -> NmfResult {
         assert!(rank > 0, "rank must be > 0");
+        let n_frames = spectrogram.rows();
+        let n_bins = spectrogram.cols();
         let mut w = vec![0.0f64; rank * n_bins];
         let mut h = vec![0.0f64; n_frames * rank];
         let mut v = vec![0.0f64; n_frames * n_bins];
         nmf_process(
             self.inner,
-            spectrogram.as_ptr(),
+            spectrogram.data().as_ptr(),
             n_frames as isize,
             n_bins as isize,
             w.as_mut_ptr(),
@@ -153,11 +165,15 @@ impl NMFFilter {
             v.as_mut_ptr(),
             rank as isize,
             n_iterations.max(1) as isize,
-            true,  // update_w
-            true,  // update_h
+            true, // update_w
+            true, // update_h
             random_seed as isize,
         );
-        (w, h, v)
+        NmfResult {
+            bases: Matrix::from_vec(w, rank, n_bins).unwrap(),
+            activations: Matrix::from_vec(h, n_frames, rank).unwrap(),
+            estimate: Matrix::from_vec(v, n_frames, n_bins).unwrap(),
+        }
     }
 
     /// Number of FFT bins this filter was created for.
@@ -190,8 +206,7 @@ mod tests {
         let mut f = NMFFilter::new(n_bins, rank).unwrap();
 
         let magnitudes = vec![0.0f64; n_bins];
-        // Uniform bases (all ones)
-        let bases = vec![1.0f64; rank * n_bins];
+        let bases = Matrix::from_vec(vec![1.0f64; rank * n_bins], rank, n_bins).unwrap();
 
         let (activations, estimate) = f.process_frame(&magnitudes, &bases, 10, -1);
         assert_eq!(activations.len(), rank);
@@ -210,9 +225,26 @@ mod tests {
         let rank = 8usize;
         let mut f = NMFFilter::new(n_bins, rank).unwrap();
         let magnitudes: Vec<f64> = (0..n_bins).map(|i| i as f64 / n_bins as f64).collect();
-        let bases = vec![0.5f64; rank * n_bins];
+        let bases = Matrix::from_vec(vec![0.5f64; rank * n_bins], rank, n_bins).unwrap();
         let (activations, estimate) = f.process_frame(&magnitudes, &bases, 5, 42);
         assert_eq!(activations.len(), rank);
         assert_eq!(estimate.len(), n_bins);
+    }
+
+    #[test]
+    fn nmf_filter_process_returns_correct_shapes() {
+        let n_bins = 65usize;
+        let n_frames = 16usize;
+        let rank = 3usize;
+        let mut f = NMFFilter::new(n_bins, rank).unwrap();
+        let spectrogram =
+            Matrix::from_vec(vec![0.1f64; n_frames * n_bins], n_frames, n_bins).unwrap();
+        let result = f.process(&spectrogram, rank, 10, -1);
+        assert_eq!(result.bases.rows(), rank);
+        assert_eq!(result.bases.cols(), n_bins);
+        assert_eq!(result.activations.rows(), n_frames);
+        assert_eq!(result.activations.cols(), rank);
+        assert_eq!(result.estimate.rows(), n_frames);
+        assert_eq!(result.estimate.cols(), n_bins);
     }
 }

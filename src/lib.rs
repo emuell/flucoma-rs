@@ -49,6 +49,7 @@
 mod audio_transport;
 mod envelope_seg;
 mod loudness;
+mod matrix;
 mod mel_bands;
 mod nmf_filter;
 mod nmf_morph;
@@ -57,6 +58,11 @@ mod onset;
 mod onset_seg;
 mod stft;
 mod transient_seg;
+
+/// Raw data processing and helper types.
+pub mod data {
+    pub use super::matrix::Matrix;
+}
 
 /// Fast Fourier transform types and functions.
 pub mod fourier {
@@ -74,7 +80,7 @@ pub mod analyzation {
 /// Spectral transformation.
 pub mod transformation {
     pub use super::audio_transport::AudioTransport;
-    pub use super::nmf_filter::NMFFilter;
+    pub use super::nmf_filter::{NMFFilter, NmfResult};
     pub use super::nmf_morph::NMFMorph;
 }
 
