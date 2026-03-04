@@ -11,6 +11,7 @@ pub struct MelBands {
     n_bands: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for MelBands {}
 
 impl MelBands {

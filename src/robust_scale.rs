@@ -17,6 +17,7 @@ pub struct RobustScale {
     cols: Option<usize>,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for RobustScale {}
 
 impl RobustScale {

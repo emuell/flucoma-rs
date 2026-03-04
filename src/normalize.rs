@@ -14,6 +14,7 @@ pub struct Normalize {
     cols: Option<usize>,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for Normalize {}
 
 impl Normalize {

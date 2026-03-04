@@ -19,6 +19,7 @@ pub struct OnsetSegmentation {
     fft_size: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for OnsetSegmentation {}
 
 impl OnsetSegmentation {

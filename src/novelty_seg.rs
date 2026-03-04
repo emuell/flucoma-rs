@@ -18,6 +18,7 @@ pub struct NoveltySegmentation {
     n_dims: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for NoveltySegmentation {}
 
 impl NoveltySegmentation {
