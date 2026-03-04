@@ -2,6 +2,8 @@ use num_complex::Complex64 as Complex;
 
 use flucoma_sys::{nmf_morph_create, nmf_morph_destroy, nmf_morph_init, nmf_morph_process_frame};
 
+use crate::matrix::Matrix;
+
 // -------------------------------------------------------------------------------------------------
 
 /// NMF-based real-time spectral morphing with phase reconstruction (RTPGHI).
@@ -20,7 +22,6 @@ use flucoma_sys::{nmf_morph_create, nmf_morph_destroy, nmf_morph_init, nmf_morph
 /// See <https://learn.flucoma.org/reference/nmfmorph>
 pub struct NMFMorph {
     inner: *mut u8,
-    /// FFT bins = fft_size / 2 + 1; 0 until `init` is called.
     num_bins: usize,
     buf: Vec<Complex>,
 }
@@ -28,7 +29,7 @@ pub struct NMFMorph {
 unsafe impl Send for NMFMorph {}
 
 impl NMFMorph {
-    /// Allocate an NMFMorph instance.
+    /// Allocate a NMFMorph instance.
     ///
     /// # Arguments
     /// * `max_fft_size` - Maximum FFT size that will be used. Must be > 0.
@@ -49,60 +50,45 @@ impl NMFMorph {
 
     /// Initialise with two bases matrices and an activations matrix.
     ///
-    /// All matrices are **row-major flat slices**:
-    /// - `w1`, `w2`: shape `rank × n_bins`.
+    /// All matrices are **row-major**:
+    /// - `w1`, `w2`: shape `rank × n_bins` where `n_bins = fft_size / 2 + 1`.
     /// - `h`:        shape `rank × n_frames`.
     ///
-    /// `w1_cols`, `w2_cols` must equal `fft_size / 2 + 1`.
-    /// `w1_rows` and `w2_rows` must be equal (same rank).
+    /// `w1` and `w2` must have the same number of rows (rank).
+    /// `h.rows()` must equal that rank.
     ///
     /// # Arguments
-    /// * `w1` / `w1_rows` / `w1_cols` - Source bases matrix.
-    /// * `w2` / `w2_rows` / `w2_cols` - Target bases matrix.
-    /// * `h`  / `h_rows`  / `h_cols`  - Activations matrix (rank × n_frames).
-    /// * `win_size`  - Analysis window size in samples.
-    /// * `fft_size`  - FFT size (>= `win_size`, power of 2).
-    /// * `hop_size`  - Hop size in samples (> 0).
-    /// * `assign`    - Use Hungarian assignment to match W1/W2 components optimally.
+    /// * `w1`       - Source bases matrix (`rank × n_bins`).
+    /// * `w2`       - Target bases matrix (`rank × n_bins`).
+    /// * `h`        - Activations matrix (`rank × n_frames`).
+    /// * `win_size` - Analysis window size in samples.
+    /// * `fft_size` - FFT size (>= `win_size`, power of 2).
+    /// * `hop_size` - Hop size in samples (> 0).
+    /// * `assign`   - Use Hungarian assignment to match W1/W2 components optimally.
     ///
     /// # Errors
     /// Returns an error string if dimension constraints are violated.
     #[allow(clippy::too_many_arguments)]
     pub fn init(
         &mut self,
-        w1: &[f64],
-        w1_rows: usize,
-        w1_cols: usize,
-        w2: &[f64],
-        w2_rows: usize,
-        w2_cols: usize,
-        h: &[f64],
-        h_rows: usize,
-        h_cols: usize,
-        win_size: usize,
+        w1: &Matrix,
+        w2: &Matrix,
+        h: &Matrix,
+        window_size: usize,
         fft_size: usize,
         hop_size: usize,
         assign: bool,
     ) -> Result<(), &'static str> {
-        if w1.len() != w1_rows * w1_cols {
-            return Err("w1 slice length does not match w1_rows * w1_cols");
-        }
-        if w2.len() != w2_rows * w2_cols {
-            return Err("w2 slice length does not match w2_rows * w2_cols");
-        }
-        if h.len() != h_rows * h_cols {
-            return Err("h slice length does not match h_rows * h_cols");
-        }
-        if w1_rows != w2_rows {
+        if w1.rows() != w2.rows() {
             return Err("w1 and w2 must have the same number of rows (rank)");
         }
-        if h_rows != w1_rows {
-            return Err("h_rows must equal rank (w1_rows)");
+        if h.rows() != w1.rows() {
+            return Err("h.rows() must equal rank (w1.rows())");
         }
-        if win_size == 0 {
+        if window_size == 0 {
             return Err("win_size must be > 0");
         }
-        if fft_size < win_size {
+        if fft_size < window_size {
             return Err("fft_size must be >= win_size");
         }
         if hop_size == 0 {
@@ -110,16 +96,16 @@ impl NMFMorph {
         }
         nmf_morph_init(
             self.inner,
-            w1.as_ptr(),
-            w1_rows as isize,
-            w1_cols as isize,
-            w2.as_ptr(),
-            w2_rows as isize,
-            w2_cols as isize,
-            h.as_ptr(),
-            h_rows as isize,
-            h_cols as isize,
-            win_size as isize,
+            w1.data().as_ptr(),
+            w1.rows() as isize,
+            w1.cols() as isize,
+            w2.data().as_ptr(),
+            w2.rows() as isize,
+            w2.cols() as isize,
+            h.data().as_ptr(),
+            h.rows() as isize,
+            h.cols() as isize,
+            window_size as isize,
             fft_size as isize,
             hop_size as isize,
             assign,
@@ -137,8 +123,6 @@ impl NMFMorph {
     /// # Arguments
     /// * `interpolation` - Morph weight in `[0.0, 1.0]`. 0.0 = W1, 1.0 = W2.
     /// * `seed`          - Random seed for phase reconstruction (-1 = random).
-    ///
-    /// Generate one morphed complex-spectrum frame.
     ///
     /// Returns a slice of [`Complex`] bins of length `num_bins`.
     /// Valid until the next call to this method.
@@ -179,15 +163,14 @@ impl Drop for NMFMorph {
 mod tests {
     use super::*;
 
-    fn make_identity_bases(rank: usize, n_bins: usize) -> Vec<f64> {
-        // Simple bases: each row is a uniform spectrum scaled by row index+1
-        let mut w = vec![0.0f64; rank * n_bins];
+    fn make_identity_bases(rank: usize, n_bins: usize) -> Matrix {
+        let mut data = vec![0.0f64; rank * n_bins];
         for r in 0..rank {
             for c in 0..n_bins {
-                w[r * n_bins + c] = (r + 1) as f64 / n_bins as f64;
+                data[r * n_bins + c] = (r + 1) as f64 / n_bins as f64;
             }
         }
-        w
+        Matrix::from_vec(data, rank, n_bins).unwrap()
     }
 
     #[test]
@@ -203,13 +186,10 @@ mod tests {
 
         let w1 = make_identity_bases(rank, n_bins);
         let w2 = make_identity_bases(rank, n_bins);
-        let h = vec![0.5f64; rank * n_frames];
+        let h = Matrix::from_vec(vec![0.5f64; rank * n_frames], rank, n_frames).unwrap();
 
-        m.init(
-            &w1, rank, n_bins, &w2, rank, n_bins, &h, rank, n_frames, win_size, fft_size, hop_size,
-            false,
-        )
-        .unwrap();
+        m.init(&w1, &w2, &h, win_size, fft_size, hop_size, false)
+            .unwrap();
 
         assert_eq!(m.num_bins(), n_bins);
 
@@ -232,12 +212,9 @@ mod tests {
 
         let mut m = NMFMorph::new(fft_size).unwrap();
         let w = make_identity_bases(rank, n_bins);
-        let h = vec![1.0f64; rank * n_frames];
+        let h = Matrix::from_vec(vec![1.0f64; rank * n_frames], rank, n_frames).unwrap();
 
-        m.init(
-            &w, rank, n_bins, &w, rank, n_bins, &h, rank, n_frames, fft_size, fft_size, 256, false,
-        )
-        .unwrap();
+        m.init(&w, &w, &h, fft_size, fft_size, 256, false).unwrap();
 
         // Should be able to call more frames than n_frames (cycles modulo)
         for _ in 0..(n_frames * 2) {

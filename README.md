@@ -26,7 +26,7 @@ See [EXTEND.md](./EXTEND.md) on how to create new wrappers. Pull requests are we
 Detects onsets in an audio file, computes a mean mel-band vector per slice, and writes timbrally unique slices as individual WAV files. Slices that are too similar to an already-kept slice are skipped.
 
 ```sh
-cargo run --example unique-slices -- input.wav
+cargo run --release --example unique-slices -- input.wav
 ```
 
 Output: `<input_stem>_slices/slice1_<start>_<end>.wav`, etc.
@@ -39,8 +39,8 @@ Morphs two audio files together using spectral interpolation, sweeping linearly 
 - `morph` -- [NMF](https://learn.flucoma.org/reference/nmfmorph/)-based component morphing
 
 ```sh
-cargo run --example transform -- input1.wav input2.wav output.wav
-cargo run --example transform -- --mode morph input1.wav input2.wav output.wav
+cargo run --release --example transform -- input1.wav input2.wav output.wav
+cargo run --release --example transform -- --mode morph input1.wav input2.wav output.wav
 ```
 
 ## API Usage Examples
@@ -95,7 +95,7 @@ let bands = mel.process_frame(
 println!("Mel bands: {:?}", &bands[..4]);
 ```
 
-### OnsetDetectionFunctions
+### Onset Detection
 
 Computes a scalar onset detection value per frame using one of ten spectral difference functions.
 
