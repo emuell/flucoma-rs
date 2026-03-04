@@ -10,6 +10,8 @@ use flucoma_sys::{env_seg_create, env_seg_destroy, env_seg_init, env_seg_process
 ///
 /// Uses a dual-ramp envelope follower with separate fast/slow attack and
 /// release times, plus on/off thresholds for hysteresis.
+///
+/// See <https://learn.flucoma.org/reference/ampslice>
 pub struct EnvelopeSegmentation {
     inner: *mut u8,
 }

@@ -12,6 +12,8 @@ use flucoma_sys::{nmf_create, nmf_destroy, nmf_process, nmf_process_frame};
 /// 1. Train NMF offline (e.g. via a full-spectrogram decomposition) to obtain bases W.
 /// 2. Create `NMFFilter::new(n_bins, rank)`.
 /// 3. Per frame: call `process_frame` with the current magnitude spectrum and W.
+///
+/// See <https://learn.flucoma.org/reference/nmffilter>
 pub struct NMFFilter {
     inner: *mut u8,
     n_bins: usize,

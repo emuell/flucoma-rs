@@ -82,6 +82,8 @@ impl ComplexSpectrum {
 /// Two-phase setup:
 /// 1. [`Stft::new`] -- constructs and allocates.
 /// 2. Call [`Stft::process_frame`] once per hop.
+///
+/// See <https://learn.flucoma.org/learn/fourier-transform/>
 pub struct Stft {
     inner: *mut u8,
     window_size: usize,
@@ -193,6 +195,8 @@ impl Drop for Stft {
 
 /// Inverse Short-Time Fourier Transform -- reconstructs audio from complex
 /// spectra frame by frame.
+///
+/// See <https://learn.flucoma.org/learn/fourier-transform/>
 pub struct Istft {
     inner: *mut u8,
     window_size: usize,

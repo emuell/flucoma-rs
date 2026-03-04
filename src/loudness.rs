@@ -14,6 +14,8 @@ pub struct LoudnessResult {
 // -------------------------------------------------------------------------------------------------
 
 /// Measures loudness and peak level of audio frames.
+///
+/// See <https://learn.flucoma.org/reference/loudness>
 pub struct Loudness {
     inner: *mut u8,
     frame_size: usize,

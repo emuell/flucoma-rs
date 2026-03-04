@@ -10,9 +10,11 @@ pub use crate::onset::OnsetFunction;
 /// 1. [`OnsetSegmentation::new`] -- allocates buffers and initialises the detector.
 /// 2. Call [`OnsetSegmentation::process_frame`] per frame.
 ///
-/// Unlike [`crate::onset::OnsetDetectionFunctions`], which returns a continuous
+/// Unlike [`crate::analyzation::Onset`], which returns a continuous
 /// detection value, this algorithm applies a threshold and debounce internally
 /// and returns 1.0 (onset detected) or 0.0 (no onset).
+///
+/// See <https://learn.flucoma.org/reference/onsetslice>
 pub struct OnsetSegmentation {
     inner: *mut u8,
     window_size: usize,

@@ -14,6 +14,8 @@ use flucoma_sys::{nmf_morph_create, nmf_morph_destroy, nmf_morph_init, nmf_morph
 ///    activation matrix H.  Re-call `init` any time the matrices change.
 /// 3. [`NMFMorph::process_frame`] -- call once per STFT hop to get the next
 ///    interpolated complex spectrum.
+///
+/// See <https://learn.flucoma.org/reference/nmfmorph>
 pub struct NMFMorph {
     inner: *mut u8,
     /// FFT bins = fft_size / 2 + 1; 0 until `init` is called.

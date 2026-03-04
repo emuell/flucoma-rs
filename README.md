@@ -49,12 +49,10 @@ cargo run --example transform -- --mode morph input1.wav input2.wav output.wav
 
 Measures EBU R128-style integrated loudness and peak level per frame.
 
-```rust,no_run
+```rust
 use flucoma_rs::analyzation::Loudness;
 
-let frame_size = 1024;
-let sample_rate = 44100;
-let mut analyzer = Loudness::new(frame_size, sample_rate).unwrap();
+let mut analyzer = Loudness::new(1024, 44100.0).unwrap();
 
 let frame = vec![0.0f64; 1024]; // fill with audio samples
 
@@ -72,7 +70,7 @@ println!("Peak:     {:.1} dBFS", result.peak_db);
 
 Converts a magnitude spectrum into mel-scaled band energies.
 
-```rust,no_run
+```rust
 use flucoma_rs::analyzation::{Stft, MelBands, WindowType};
 
 let fft_size = 1024;
@@ -101,22 +99,24 @@ println!("Mel bands: {:?}", &bands[..4]);
 
 Computes a scalar onset detection value per frame using one of ten spectral difference functions.
 
-```rust,no_run
-use flucoma_rs::analyzation::{OnsetDetectionFunctions, OnsetFunction};
+```rust
+use flucoma_rs::analyzation::{Onset, OnsetFunction};
 
 let window_size = 1024;
 let filter_size = 5;
-let mut odf = OnsetDetectionFunctions::new(window_size, window_size, filter_size).unwrap();
+let mut odf = Onset::new(window_size, window_size, filter_size).unwrap();
 
 // Feed silent frame to seed history
 let silence = vec![0.0f64; window_size];
 let frame_delta = 0;
-let _ = odf.process_frame(&silence, OnsetFunction::PowerSpectrum, filter_size, frame_delta);
+let _ = odf.process_frame(
+    &silence, OnsetFunction::PowerSpectrum, filter_size, frame_delta);
 
 // Then feed a frame with audio
 let mut audio_frame = vec![0.0f64; window_size];
 audio_frame[512] = 1.0;
-let value = odf.process_frame(&audio_frame, OnsetFunction::PowerSpectrum, 5, 0);
+let value = odf.process_frame(
+    &audio_frame, OnsetFunction::PowerSpectrum, filter_size, 0);
 
 println!("Onset value: {:.4}", value);
 ```

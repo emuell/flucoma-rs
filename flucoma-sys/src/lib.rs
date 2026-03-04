@@ -57,8 +57,6 @@ pub fn loudness_init(ptr: *mut u8, size: FlucomaIndex, sample_rate: f64) {
     }
 }
 
-/// Fills `output[0] = loudness_dB`, `output[1] = peak_dB`.
-/// `output` must point to at least 2 f64 values.
 pub fn loudness_process_frame(
     ptr: *mut u8,
     input: *const f64,
@@ -108,7 +106,6 @@ pub fn stft_destroy(ptr: *mut u8) {
     }
 }
 
-/// `out_complex`: interleaved [re0, im0, re1, im1, ...], len = 2 * num_bins.
 pub fn stft_process_frame(
     ptr: *mut u8,
     input: *const f64,
@@ -157,7 +154,6 @@ pub fn istft_destroy(ptr: *mut u8) {
     }
 }
 
-/// `in_complex`: interleaved [re0, im0, re1, im1, ...], len = 2 * num_bins.
 pub fn istft_process_frame(
     ptr: *mut u8,
     in_complex: *const f64,
@@ -281,8 +277,6 @@ pub fn audio_transport_init(
     }
 }
 
-/// Fills `output` (length = 2 * frame_len): first half is interpolated audio,
-/// second half is the squared window for overlap-add normalization.
 pub fn audio_transport_process_frame(
     ptr: *mut u8,
     in1: *const f64,
@@ -327,12 +321,6 @@ pub fn nmf_destroy(ptr: *mut u8) {
     }
 }
 
-/// Offline batch NMF decomposition of a full magnitude spectrogram.
-///
-/// - `x`    : input spectrogram, flat row-major `n_frames × n_bins`
-/// - `w1`   : output bases,      flat row-major `rank × n_bins`
-/// - `h1`   : output activations, flat row-major `n_frames × rank`
-/// - `v1`   : output reconstruction, flat row-major `n_frames × n_bins`
 pub fn nmf_process(
     ptr: *mut u8,
     x: *const f64,
@@ -365,12 +353,6 @@ pub fn nmf_process(
     }
 }
 
-/// Compute NMF activations for one magnitude-spectrum frame against a fixed dictionary.
-///
-/// - `input`    : magnitude spectrum, length `input_len` (= nBins)
-/// - `bases`    : flat row-major bases matrix, `bases_rows` × `bases_cols` (rank × nBins)
-/// - `output`   : activation vector, length `bases_rows` (= rank)
-/// - `estimate` : reconstructed magnitude estimate, length `input_len`
 pub fn nmf_process_frame(
     ptr: *mut u8,
     input: *const f64,
@@ -423,8 +405,6 @@ pub fn nmf_morph_destroy(ptr: *mut u8) {
     }
 }
 
-/// Initialise the morph with two sets of NMF bases (W1, W2) and activations (H).
-/// All matrices are flat row-major: W1 and W2 are `rank × n_bins`, H is `rank × n_frames`.
 #[allow(clippy::too_many_arguments)]
 pub fn nmf_morph_init(
     ptr: *mut u8,
@@ -460,8 +440,6 @@ pub fn nmf_morph_init(
     }
 }
 
-/// Generate one morphed complex spectrum frame.
-/// `out_complex`: interleaved [re0, im0, re1, im1, ...], length = 2 * num_bins.
 pub fn nmf_morph_process_frame(
     ptr: *mut u8,
     out_complex: *mut f64,
@@ -521,7 +499,6 @@ pub fn onset_init(
     }
 }
 
-/// Returns the onset detection value for this frame.
 pub fn onset_process_frame(
     ptr: *mut u8,
     input: *const f64,
@@ -580,7 +557,6 @@ pub fn onset_seg_init(
     }
 }
 
-/// Returns 1.0 if an onset is detected, 0.0 otherwise.
 pub fn onset_seg_process_frame(
     ptr: *mut u8,
     input: *const f64,
@@ -635,7 +611,6 @@ pub fn env_seg_init(ptr: *mut u8, floor: f64, hi_pass_freq: f64) {
     }
 }
 
-/// Process a single audio sample. Returns 1.0 on onset, 0.0 otherwise.
 pub fn env_seg_process_sample(
     ptr: *mut u8,
     sample: f64,
@@ -710,7 +685,6 @@ pub fn novelty_seg_init(
     }
 }
 
-/// Returns 1.0 at novelty slice points, 0.0 otherwise.
 pub fn novelty_seg_process_frame(
     ptr: *mut u8,
     input: *const f64,
@@ -794,8 +768,6 @@ pub fn transient_seg_set_detection_params(
     }
 }
 
-/// Input length must be `input_size` (hop + pad). Output length must be `hop_size`.
-/// Each output sample is 1.0 (transient onset) or 0.0.
 pub fn transient_seg_process(
     ptr: *mut u8,
     input: *const f64,

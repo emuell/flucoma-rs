@@ -13,6 +13,8 @@ use flucoma_sys::{
 /// Each call to `process_frame` takes a feature vector of length `n_dims` (e.g.
 /// mel bands or MFCCs). The algorithm computes a self-similarity novelty curve
 /// internally and returns 1.0 when a peak above `threshold` is detected.
+///
+/// See <https://learn.flucoma.org/reference/noveltyslice>
 pub struct NoveltySegmentation {
     inner: *mut u8,
     n_dims: usize,

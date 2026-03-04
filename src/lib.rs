@@ -1,5 +1,52 @@
 //! Safe Rust bindings for [flucoma-core](https://github.com/flucoma/flucoma-core)
 //! audio analysis algorithms.
+//!
+//! See <https://learn.flucoma.org/learn/> for more info about FluCoMa.
+//!
+//! ## Examples
+//!
+//! ### Loudness
+//!
+//! ```rust,no_run
+//! use flucoma_rs::analyzation::Loudness;
+//!
+//! let mut analyzer = Loudness::new(1024, 44100.0).unwrap();
+//!
+//! let frame = vec![0.0f64; 1024]; // fill with audio samples
+//!
+//! let result = analyzer.process_frame(
+//!     &frame,
+//!     true, // k_weighting
+//!     true, // true_peak
+//! );
+//!
+//! println!("Loudness: {:.1} dBFS", result.loudness_db);
+//! println!("Peak:     {:.1} dBFS", result.peak_db);
+//! ```
+//!
+//! ### Onset Detection
+//!
+//!```rust,no_run
+//! use flucoma_rs::analyzation::{Onset, OnsetFunction};
+//!
+//! let window_size = 1024;
+//! let filter_size = 5;
+//! let mut odf = Onset::new(window_size, window_size, filter_size).unwrap();
+//!
+//! // Feed silent frame to seed history
+//! let silence = vec![0.0f64; window_size];
+//! let frame_delta = 0;
+//! let _ = odf.process_frame(
+//!   &silence, OnsetFunction::PowerSpectrum, filter_size, frame_delta);
+//!
+//! // Then feed a frame with audio
+//! let mut audio_frame = vec![0.0f64; window_size];
+//! audio_frame[512] = 1.0;
+//! let value = odf.process_frame(
+//!   &audio_frame, OnsetFunction::PowerSpectrum, filter_size, 0);
+//!
+//! println!("Onset value: {:.4}", value);
+//!```
 
 mod audio_transport;
 mod envelope_seg;
@@ -13,19 +60,22 @@ mod onset_seg;
 mod stft;
 mod transient_seg;
 
+/// Audio feature extraction.
 pub mod analyzation {
     pub use super::loudness::Loudness;
     pub use super::mel_bands::MelBands;
-    pub use super::onset::{OnsetDetectionFunctions, OnsetFunction};
+    pub use super::onset::{Onset, OnsetFunction};
     pub use super::stft::{ComplexSpectrum, Istft, Stft, WindowType};
 }
 
+/// Spectral transformation.
 pub mod transformation {
     pub use super::audio_transport::AudioTransport;
     pub use super::nmf_filter::NMFFilter;
     pub use super::nmf_morph::NMFMorph;
 }
 
+/// Onset segmentation.
 pub mod segmentation {
     pub use super::envelope_seg::EnvelopeSegmentation;
     pub use super::novelty_seg::NoveltySegmentation;

@@ -15,6 +15,8 @@ use flucoma_sys::{
 /// Each call to `process` consumes an input block of `input_size()` samples
 /// and returns a `Vec<f64>` of `hop_size()` samples where each value is
 /// 1.0 (transient onset) or 0.0.
+///
+/// See <https://learn.flucoma.org/reference/transientslice>
 pub struct TransientSegmentation {
     inner: *mut u8,
     hop_size: usize,

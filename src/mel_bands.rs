@@ -5,6 +5,8 @@ use flucoma_sys::{melbands_create, melbands_destroy, melbands_init, melbands_pro
 /// Mel-scaled filter bank -- converts a magnitude spectrum into mel band energies.
 ///
 /// Call [`MelBands::process_frame`] with magnitude spectra (not raw complex).
+///
+/// See <https://learn.flucoma.org/reference/melbands>
 pub struct MelBands {
     inner: *mut u8,
     n_bins: usize,

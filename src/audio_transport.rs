@@ -14,6 +14,8 @@ use flucoma_sys::{
 /// Each call takes two time-domain input frames and an interpolation `weight`
 /// (0.0 = all `in1`, 1.0 = all `in2`) and returns `(audio, window_sq)` -- two
 /// slices into an internal preallocated buffer valid until the next call.
+///
+/// See <https://learn.flucoma.org/reference/audiotransport>
 pub struct AudioTransport {
     inner: *mut u8,
     window_size: usize,

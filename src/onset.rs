@@ -36,19 +36,21 @@ pub enum OnsetFunction {
 /// Computes frame-by-frame onset detection values from audio.
 ///
 /// Two-phase setup:
-/// 1. [`OnsetDetectionFunctions::new`] -- allocates buffers.
-/// 2. Call [`OnsetDetectionFunctions::process_frame`] per frame.
+/// 1. [`Onset::new`] -- allocates buffers.
+/// 2. Call [`Onset::process_frame`] per frame.
 ///
 /// The algorithm maintains internal frame history for differential functions.
-pub struct OnsetDetectionFunctions {
+///
+/// See <https://learn.flucoma.org/reference/onsetfeature>
+pub struct Onset {
     inner: *mut u8,
     window_size: usize,
     fft_size: usize,
 }
 
-unsafe impl Send for OnsetDetectionFunctions {}
+unsafe impl Send for Onset {}
 
-impl OnsetDetectionFunctions {
+impl Onset {
     /// Create and initialise an onset detector.
     ///
     /// # Arguments
@@ -138,7 +140,7 @@ impl OnsetDetectionFunctions {
     }
 }
 
-impl Drop for OnsetDetectionFunctions {
+impl Drop for Onset {
     fn drop(&mut self) {
         onset_destroy(self.inner);
     }
@@ -152,7 +154,7 @@ mod tests {
 
     #[test]
     fn onset_silent_frame_returns_value() {
-        let mut odf = OnsetDetectionFunctions::new(1024, 1024, 5).unwrap();
+        let mut odf = Onset::new(1024, 1024, 5).unwrap();
         let silence = vec![0.0f64; 1024];
         let val = odf.process_frame(&silence, OnsetFunction::PowerSpectrum, 5, 0);
         // Silence should give a near-zero detection value
@@ -165,7 +167,7 @@ mod tests {
 
     #[test]
     fn onset_impulse_gives_larger_value() {
-        let mut odf = OnsetDetectionFunctions::new(1024, 1024, 0).unwrap();
+        let mut odf = Onset::new(1024, 1024, 0).unwrap();
         // First frame: silence (seeds history)
         let silence = vec![0.0f64; 1024];
         let _ = odf.process_frame(&silence, OnsetFunction::PowerSpectrum, 0, 0);
