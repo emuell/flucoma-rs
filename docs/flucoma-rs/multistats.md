@@ -33,6 +33,16 @@ pub fn values(&self) -> &[f64];
 pub fn num_channels(&self) -> usize;
 pub fn values_per_channel(&self) -> usize;
 pub fn channel(&self, channel: usize) -> Option<&[f64]>;
+
+// Helpers to fetch specific statistics from raw data:
+// (derivative 0 = data, 1 = first derivative, 2 = second derivative)
+pub fn mean(&self, channel: usize, derivative: usize) -> Option<f64>;
+pub fn std(&self, channel: usize, derivative: usize) -> Option<f64>;
+pub fn skew(&self, channel: usize, derivative: usize) -> Option<f64>;
+pub fn kurt(&self, channel: usize, derivative: usize) -> Option<f64>;
+pub fn low(&self, channel: usize, derivative: usize) -> Option<f64>;
+pub fn mid(&self, channel: usize, derivative: usize) -> Option<f64>;
+pub fn high(&self, channel: usize, derivative: usize) -> Option<f64>;
 ```
 
 ## Notes

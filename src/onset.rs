@@ -46,6 +46,7 @@ pub struct OnsetDetectionFunctions {
     fft_size: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for OnsetDetectionFunctions {}
 
 impl OnsetDetectionFunctions {

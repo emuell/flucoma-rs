@@ -82,4 +82,31 @@ impl Drop for KDTree {
     }
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for KDTree {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn kdtree_add_and_search() {
+        let mut tree = KDTree::new(2);
+        tree.add("origin", &[0.0, 0.0]);
+        tree.add("right", &[10.0, 0.0]);
+        tree.add("up", &[0.0, 10.0]);
+        tree.add("diagonal", &[7.0, 7.0]);
+
+        let target = [1.0, 1.0];
+        let result = tree.k_nearest(&target, 2);
+        assert_eq!(result.ids.len(), 2);
+        assert_eq!(result.ids[0], "origin");
+
+        let target2 = [8.0, 2.0];
+        let result2 = tree.k_nearest(&target2, 1);
+        assert_eq!(result2.ids.len(), 1);
+        // [8.0, 2.0] is distance sqrt((8-10)^2 + (2-0)^2) = sqrt(4+4) = sqrt(8) to "right"
+        // [8.0, 2.0] is distance sqrt((8-7)^2 + (2-7)^2) = sqrt(1+25) = sqrt(26) to "diagonal"
+        assert_eq!(result2.ids[0], "right");
+    }
+}

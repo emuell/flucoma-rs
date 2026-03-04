@@ -22,6 +22,7 @@ pub struct AudioTransport {
     buf: Vec<f64>,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for AudioTransport {}
 
 impl AudioTransport {

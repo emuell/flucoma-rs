@@ -21,6 +21,7 @@ pub struct TransientSegmentation {
     input_size: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for TransientSegmentation {}
 
 impl TransientSegmentation {

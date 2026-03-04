@@ -18,6 +18,7 @@ pub struct Mds {
     inner: *mut u8,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for Mds {}
 
 impl Mds {

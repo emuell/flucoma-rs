@@ -19,6 +19,7 @@ pub struct Loudness {
     frame_size: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for Loudness {}
 
 impl Loudness {

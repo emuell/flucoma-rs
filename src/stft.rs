@@ -90,6 +90,7 @@ pub struct Stft {
     num_bins: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for Stft {}
 
 impl Stft {
@@ -201,6 +202,7 @@ pub struct Istft {
     num_bins: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for Istft {}
 
 impl Istft {

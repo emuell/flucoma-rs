@@ -133,6 +133,7 @@ pub struct BufStats {
     config: BufStatsConfig,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for BufStats {}
 
 impl BufStats {

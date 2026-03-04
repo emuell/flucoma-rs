@@ -47,7 +47,9 @@ pub struct SKMeans {
     k: usize,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for KMeans {}
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for SKMeans {}
 
 impl KMeans {

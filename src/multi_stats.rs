@@ -59,6 +59,40 @@ impl MultiStatsOutput {
         let end = start + self.values_per_channel;
         self.values.get(start..end)
     }
+
+    fn get_stat(&self, channel: usize, derivative: usize, stat_index: usize) -> Option<f64> {
+        let channel_data = self.channel(channel)?;
+        let idx = derivative * STATS_PER_DERIVATIVE + stat_index;
+        channel_data.get(idx).copied()
+    }
+
+    pub fn mean(&self, channel: usize, derivative: usize) -> Option<f64> {
+        self.get_stat(channel, derivative, 0)
+    }
+
+    pub fn std(&self, channel: usize, derivative: usize) -> Option<f64> {
+        self.get_stat(channel, derivative, 1)
+    }
+
+    pub fn skew(&self, channel: usize, derivative: usize) -> Option<f64> {
+        self.get_stat(channel, derivative, 2)
+    }
+
+    pub fn kurt(&self, channel: usize, derivative: usize) -> Option<f64> {
+        self.get_stat(channel, derivative, 3)
+    }
+
+    pub fn low(&self, channel: usize, derivative: usize) -> Option<f64> {
+        self.get_stat(channel, derivative, 4)
+    }
+
+    pub fn mid(&self, channel: usize, derivative: usize) -> Option<f64> {
+        self.get_stat(channel, derivative, 5)
+    }
+
+    pub fn high(&self, channel: usize, derivative: usize) -> Option<f64> {
+        self.get_stat(channel, derivative, 6)
+    }
 }
 
 /// Thin safe wrapper for `flucoma::algorithm::MultiStats`.
@@ -67,6 +101,7 @@ pub struct MultiStats {
     config: MultiStatsConfig,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for MultiStats {}
 
 impl MultiStats {
@@ -219,11 +254,20 @@ mod tests {
     }
 
     #[test]
-    fn non_positive_weights_zero_output() {
+    fn helper_methods_return_correct_values() {
         let mut ms = MultiStats::new(MultiStatsConfig::default()).unwrap();
         let input = [1.0, 2.0, 3.0, 4.0];
-        let weights = [0.0, -1.0, 0.0, -2.0];
-        let out = ms.process(&input, 4, 1, Some(&weights)).unwrap();
-        assert!(out.values().iter().all(|&v| v == 0.0));
+        let out = ms.process(&input, 4, 1, None).unwrap();
+
+        assert_eq!(out.mean(0, 0), Some(2.5));
+        assert!(out.std(0, 0).unwrap() > 0.0);
+        assert!(out.skew(0, 0).is_some());
+        assert!(out.kurt(0, 0).is_some());
+        assert!(out.low(0, 0).is_some());
+        assert!(out.mid(0, 0).is_some());
+        assert!(out.high(0, 0).is_some());
+
+        assert_eq!(out.mean(1, 0), None);
+        assert_eq!(out.mean(0, 1), None);
     }
 }

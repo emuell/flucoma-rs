@@ -11,6 +11,7 @@ pub struct RunningStats {
     stddev_buf: Vec<f64>,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for RunningStats {}
 
 impl RunningStats {

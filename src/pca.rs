@@ -59,6 +59,7 @@ pub struct Pca {
     fitted_scaler: Option<FittedScaler>,
 }
 
+// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for Pca {}
 
 impl Pca {
