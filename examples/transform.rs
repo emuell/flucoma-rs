@@ -16,7 +16,7 @@ use std::{error::Error, fs::File};
 
 use arg::{parse_args, Args};
 use flucoma_rs::{
-    analyzation::{ComplexSpectrum, Istft, Stft, WindowType},
+    fourier::{ComplexSpectrum, Istft, Stft, WindowType},
     transformation::{AudioTransport, NMFFilter, NMFMorph},
 };
 
@@ -29,7 +29,7 @@ const HOP_SIZE: usize = WINDOW_SIZE / 2;
 
 // NMF config (morph mode only)
 const NMF_RANK: usize = 8;
-const NMF_ITERATIONS: usize = 100;
+const NMF_ITERATIONS: usize = 10;
 
 // -------------------------------------------------------------------------------------------------
 
@@ -239,13 +239,13 @@ fn run_nmf_morph(
             extract_window(&samples1[channel], start, &mut frame_buffer);
             let s = stfts1[channel].process_frame(&frame_buffer);
             for bin in 0..bin_count {
-                spec1[channel][hop * bin_count + bin] = s.magnitude(bin);
+                spec1[channel][hop * bin_count + bin] = s.bins[bin].norm();
             }
 
             extract_window(&samples2[channel], start, &mut frame_buffer);
             let s = stfts2[channel].process_frame(&frame_buffer);
             for bin in 0..bin_count {
-                spec2[channel][hop * bin_count + bin] = s.magnitude(bin);
+                spec2[channel][hop * bin_count + bin] = s.bins[bin].norm();
             }
         }
     }
@@ -329,10 +329,7 @@ fn run_nmf_morph(
 
         for channel in 0..channel_count {
             let raw = morphers[channel].process_frame(weight, -1);
-            let spec = ComplexSpectrum {
-                data: raw.to_vec(),
-                num_bins: bin_count,
-            };
+            let spec = ComplexSpectrum { bins: raw.to_vec() };
             istfts[channel].process_frame(&spec, &mut audio_frame);
 
             for i in 0..FFT_SIZE {

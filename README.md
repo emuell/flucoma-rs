@@ -71,7 +71,7 @@ println!("Peak:     {:.1} dBFS", result.peak_db);
 Converts a magnitude spectrum into mel-scaled band energies.
 
 ```rust
-use flucoma_rs::analyzation::{Stft, MelBands, WindowType};
+use flucoma_rs::{analyzation::MelBands, fourier::{Stft, WindowType}};
 
 let fft_size = 1024;
 let n_bins = fft_size / 2 + 1;

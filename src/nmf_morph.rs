@@ -1,3 +1,5 @@
+use num_complex::Complex64 as Complex;
+
 use flucoma_sys::{nmf_morph_create, nmf_morph_destroy, nmf_morph_init, nmf_morph_process_frame};
 
 // -------------------------------------------------------------------------------------------------
@@ -6,7 +8,7 @@ use flucoma_sys::{nmf_morph_create, nmf_morph_destroy, nmf_morph_init, nmf_morph
 ///
 /// Morphs between two sets of NMF spectral bases using optimal transport, modulated
 /// by a set of NMF activations.  Outputs a complex spectrum per frame that can be
-/// fed directly to [`crate::analyzation::Istft`].
+/// fed directly to [`crate::fourier::Istft`].
 ///
 /// # Two-phase setup
 /// 1. [`NMFMorph::new`] -- allocates buffers for a given maximum FFT size.
@@ -20,8 +22,7 @@ pub struct NMFMorph {
     inner: *mut u8,
     /// FFT bins = fft_size / 2 + 1; 0 until `init` is called.
     num_bins: usize,
-    /// Interleaved [re0, im0, re1, im1, ...] output buffer, length = 2 * num_bins.
-    buf: Vec<f64>,
+    buf: Vec<Complex>,
 }
 
 unsafe impl Send for NMFMorph {}
@@ -124,7 +125,7 @@ impl NMFMorph {
             assign,
         );
         self.num_bins = fft_size / 2 + 1;
-        self.buf = vec![0.0f64; 2 * self.num_bins];
+        self.buf = vec![Complex::default(); self.num_bins];
         Ok(())
     }
 
@@ -137,12 +138,14 @@ impl NMFMorph {
     /// * `interpolation` - Morph weight in `[0.0, 1.0]`. 0.0 = W1, 1.0 = W2.
     /// * `seed`          - Random seed for phase reconstruction (-1 = random).
     ///
-    /// Returns an interleaved complex spectrum `[re0, im0, re1, im1, ...]` of
-    /// length `2 * num_bins`.  Valid until the next call to this method.
+    /// Generate one morphed complex-spectrum frame.
+    ///
+    /// Returns a slice of [`Complex`] bins of length `num_bins`.
+    /// Valid until the next call to this method.
     ///
     /// # Panics
     /// Panics if `init` has not been called yet.
-    pub fn process_frame(&mut self, interpolation: f64, seed: i64) -> &[f64] {
+    pub fn process_frame(&mut self, interpolation: f64, seed: i64) -> &[Complex] {
         assert!(
             self.num_bins > 0,
             "NMFMorph::init must be called before process_frame"
@@ -150,7 +153,7 @@ impl NMFMorph {
         let interpolation = interpolation.clamp(0.0, 1.0);
         nmf_morph_process_frame(
             self.inner,
-            self.buf.as_mut_ptr(),
+            self.buf.as_mut_ptr() as *mut f64,
             self.num_bins as isize,
             interpolation,
             seed as isize,
@@ -211,9 +214,12 @@ mod tests {
         assert_eq!(m.num_bins(), n_bins);
 
         let out = m.process_frame(0.5, -1);
-        assert_eq!(out.len(), 2 * n_bins);
-        for &v in out {
-            assert!(v.is_finite(), "output must be finite, got {v}");
+        assert_eq!(out.len(), n_bins);
+        for c in out {
+            assert!(
+                c.re.is_finite() && c.im.is_finite(),
+                "output must be finite, got {c}"
+            );
         }
     }
 
@@ -236,7 +242,7 @@ mod tests {
         // Should be able to call more frames than n_frames (cycles modulo)
         for _ in 0..(n_frames * 2) {
             let out = m.process_frame(0.0, 0);
-            assert_eq!(out.len(), 2 * n_bins);
+            assert_eq!(out.len(), n_bins);
         }
     }
 }

@@ -1,6 +1,7 @@
 use flucoma_sys::{
     istft_create, istft_destroy, istft_process_frame, stft_create, stft_destroy, stft_process_frame,
 };
+use num_complex::Complex64 as Complex;
 
 // -------------------------------------------------------------------------------------------------
 
@@ -17,60 +18,38 @@ pub enum WindowType {
 
 // -------------------------------------------------------------------------------------------------
 
-/// A complex spectral frame as interleaved `[re0, im0, re1, im1, ...]` f64 values.
+/// A complex spectral frame produced by [`Stft`] and consumed by [`Istft`].
 ///
-/// The length of `data` is always `2 * num_bins`.
+/// Each bin is a [`Complex`] value (`re` + `im`). Bins are ordered from DC
+/// to Nyquist: `bins.len() == fft_size / 2 + 1`.
 #[derive(Debug, Clone)]
 pub struct ComplexSpectrum {
-    /// Interleaved real/imaginary pairs.
-    pub data: Vec<f64>,
-    /// Number of complex bins (`fft_size / 2 + 1`).
-    pub num_bins: usize,
+    /// Complex bins, DC to Nyquist.
+    pub bins: Vec<Complex>,
 }
 
 impl ComplexSpectrum {
     /// Allocate a zeroed spectrum for `num_bins` complex bins.
     pub fn zeros(num_bins: usize) -> Self {
         Self {
-            data: vec![0.0; num_bins * 2],
-            num_bins,
+            bins: vec![Complex::default(); num_bins],
         }
     }
 
-    /// Real part of bin `i`.
+    /// Number of complex bins (`fft_size / 2 + 1`).
     #[inline]
-    pub fn re(&self, i: usize) -> f64 {
-        self.data[i * 2]
-    }
-
-    /// Imaginary part of bin `i`.
-    #[inline]
-    pub fn im(&self, i: usize) -> f64 {
-        self.data[i * 2 + 1]
-    }
-
-    /// Magnitude of bin `i`.
-    #[inline]
-    pub fn magnitude(&self, i: usize) -> f64 {
-        let r = self.re(i);
-        let m = self.im(i);
-        (r * r + m * m).sqrt()
-    }
-
-    /// Phase of bin `i` in radians.
-    #[inline]
-    pub fn phase(&self, i: usize) -> f64 {
-        self.im(i).atan2(self.re(i))
+    pub fn num_bins(&self) -> usize {
+        self.bins.len()
     }
 
     /// All magnitudes as a `Vec<f64>`.
     pub fn magnitudes(&self) -> Vec<f64> {
-        (0..self.num_bins).map(|i| self.magnitude(i)).collect()
+        self.bins.iter().map(|c| c.norm()).collect()
     }
 
-    /// All phases as a `Vec<f64>`.
+    /// All phases in radians as a `Vec<f64>`.
     pub fn phases(&self) -> Vec<f64> {
-        (0..self.num_bins).map(|i| self.phase(i)).collect()
+        self.bins.iter().map(|c| c.arg()).collect()
     }
 }
 
@@ -158,7 +137,7 @@ impl Stft {
             self.inner,
             frame.as_ptr(),
             frame.len() as isize,
-            spec.data.as_mut_ptr(),
+            spec.bins.as_mut_ptr() as *mut f64,
             self.num_bins as isize,
         );
         spec
@@ -249,13 +228,15 @@ impl Istft {
     /// * `output`   - Output buffer of exactly `window_size` samples.
     ///
     /// # Panics
-    /// Panics if `spectrum.num_bins != self.num_bins` or
+    /// Panics if `spectrum.num_bins() != self.num_bins` or
     /// `output.len() != window_size`.
     pub fn process_frame(&mut self, spectrum: &ComplexSpectrum, output: &mut [f64]) {
         assert_eq!(
-            spectrum.num_bins, self.num_bins,
+            spectrum.num_bins(),
+            self.num_bins,
             "spectrum num_bins ({}) must equal num_bins ({})",
-            spectrum.num_bins, self.num_bins
+            spectrum.num_bins(),
+            self.num_bins
         );
         assert_eq!(
             output.len(),
@@ -266,7 +247,7 @@ impl Istft {
         );
         istft_process_frame(
             self.inner,
-            spectrum.data.as_ptr(),
+            spectrum.bins.as_ptr() as *const f64,
             self.num_bins as isize,
             output.as_mut_ptr(),
             output.len() as isize,
@@ -312,8 +293,8 @@ mod tests {
         let mut stft = Stft::new(1024, fft_size, 512, WindowType::Hann).unwrap();
         let frame = vec![0.0f64; 1024];
         let spec = stft.process_frame(&frame);
-        assert_eq!(spec.num_bins, fft_size / 2 + 1);
-        assert_eq!(spec.data.len(), (fft_size / 2 + 1) * 2);
+        assert_eq!(spec.num_bins(), fft_size / 2 + 1);
+        assert_eq!(spec.bins.len(), fft_size / 2 + 1);
     }
 
     #[test]

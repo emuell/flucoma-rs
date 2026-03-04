@@ -1,8 +1,6 @@
 //! Safe Rust bindings for [flucoma-core](https://github.com/flucoma/flucoma-core)
 //! audio analysis algorithms.
 //!
-//! See <https://learn.flucoma.org/learn/> for more info about FluCoMa.
-//!
 //! ## Examples
 //!
 //! ### Loudness
@@ -60,12 +58,17 @@ mod onset_seg;
 mod stft;
 mod transient_seg;
 
+/// Fast Fourier transform types and functions.
+pub mod fourier {
+    pub use super::stft::{ComplexSpectrum, Istft, Stft, WindowType};
+    pub use num_complex::Complex64 as Complex;
+}
+
 /// Audio feature extraction.
 pub mod analyzation {
     pub use super::loudness::Loudness;
     pub use super::mel_bands::MelBands;
     pub use super::onset::{Onset, OnsetFunction};
-    pub use super::stft::{ComplexSpectrum, Istft, Stft, WindowType};
 }
 
 /// Spectral transformation.
