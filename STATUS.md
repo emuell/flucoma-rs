@@ -31,10 +31,9 @@
 ### Audio slicing (`flucoma_rs::segmentation`)
 
 - [x] [`OnsetSegmentation`](https://learn.flucoma.org/reference/onsetslice) as `flucoma_rs::segmentation::OnsetSegmentation` -- segment audio stream at detected onsets
-- [x] [`EnvelopeSegmentation`](https://learn.flucoma.org/reference/ampslice) as `flucoma_rs::segmentation::EnvelopeSegmentation` -- amplitude-envelope-based segmentation
+- [x] [`AmpSegmentation`](https://learn.flucoma.org/reference/ampslice) as `flucoma_rs::segmentation::AmpSegmentation` -- amplitude-envelope-based segmentation
 - [x] [`NoveltySegmentation`](https://learn.flucoma.org/reference/noveltyslice) as `flucoma_rs::segmentation::NoveltySegmentation` -- novelty-curve segmentation
 - [x] [`TransientSegmentation`](https://learn.flucoma.org/reference/transientslice) as `flucoma_rs::segmentation::TransientSegmentation` -- transient detector and segmenter
-- [ ] [`EnvelopeGate`](https://learn.flucoma.org/reference/ampgate) -- amplitude-based gate segmenter
 
 ### Machine Learning & Statistics (`flucoma_rs::data`)
 
@@ -59,5 +58,5 @@
 
 - [x] [`STFT`](https://learn.flucoma.org/learn/fourier-transform/) as `flucoma_rs::fourier::Stft` -- frame-by-frame Short-Time Fourier Transform
 - [x] [`ISTFT`](https://learn.flucoma.org/learn/fourier-transform/) as `flucoma_rs::fourier::Istft` -- inverse STFT, complex spectrum -> audio
-- [ ] [`DCT`](https://learn.flucoma.org/reference/mfcc) -- Discrete Cosine Transform (used by MFCC)
 - [ ] [`GriffinLim`](https://learn.flucoma.org/learn/fourier-transform/) -- Griffin-Lim phase reconstruction (magnitude spectrum -> audio)
+- [ ] [`DCT`](https://learn.flucoma.org/reference/mfcc) -- Discrete Cosine Transform (used by MFCC)

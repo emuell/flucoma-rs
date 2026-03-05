@@ -626,9 +626,9 @@ pub fn onset_seg_process_frame(
 }
 
 // -------------------------------------------------------------------------------------------------
-// EnvelopeSegmentation
+// AmpSegmentation
 
-pub fn env_seg_create() -> *mut u8 {
+pub fn amp_seg_create() -> *mut u8 {
     unsafe {
         cpp!([] -> *mut u8 as "void*" {
             return static_cast<void*>(new EnvelopeSegmentation());
@@ -636,7 +636,7 @@ pub fn env_seg_create() -> *mut u8 {
     }
 }
 
-pub fn env_seg_destroy(ptr: *mut u8) {
+pub fn amp_seg_destroy(ptr: *mut u8) {
     unsafe {
         cpp!([ptr as "EnvelopeSegmentation*"] {
             delete ptr;
@@ -644,7 +644,7 @@ pub fn env_seg_destroy(ptr: *mut u8) {
     }
 }
 
-pub fn env_seg_init(ptr: *mut u8, floor: f64, hi_pass_freq: f64) {
+pub fn amp_seg_init(ptr: *mut u8, floor: f64, hi_pass_freq: f64) {
     unsafe {
         cpp!([
             ptr as "EnvelopeSegmentation*",
@@ -655,7 +655,7 @@ pub fn env_seg_init(ptr: *mut u8, floor: f64, hi_pass_freq: f64) {
     }
 }
 
-pub fn env_seg_process_sample(
+pub fn amp_seg_process_sample(
     ptr: *mut u8,
     sample: f64,
     on_threshold: f64,

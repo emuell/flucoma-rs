@@ -47,8 +47,8 @@
 //!```
 
 mod amp_feature;
+mod amp_seg;
 mod audio_transport;
-mod envelope_seg;
 mod loudness;
 mod matrix;
 mod mel_bands;
@@ -92,7 +92,7 @@ pub mod transformation {
 
 /// Onset segmentation.
 pub mod segmentation {
-    pub use super::envelope_seg::EnvelopeSegmentation;
+    pub use super::amp_seg::AmpSegmentation;
     pub use super::novelty_seg::NoveltySegmentation;
     pub use super::onset_seg::OnsetSegmentation;
     pub use super::transient_seg::TransientSegmentation;
