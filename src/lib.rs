@@ -46,6 +46,7 @@
 //! println!("Onset value: {:.4}", value);
 //!```
 
+mod amp_feature;
 mod audio_transport;
 mod envelope_seg;
 mod loudness;
@@ -53,9 +54,11 @@ mod matrix;
 mod mel_bands;
 mod nmf_filter;
 mod nmf_morph;
+mod novelty_feature;
 mod novelty_seg;
 mod onset;
 mod onset_seg;
+mod sine;
 mod stft;
 mod transient_seg;
 
@@ -72,9 +75,12 @@ pub mod fourier {
 
 /// Audio feature extraction.
 pub mod analyzation {
+    pub use super::amp_feature::AmpFeature;
     pub use super::loudness::Loudness;
     pub use super::mel_bands::MelBands;
+    pub use super::novelty_feature::Novelty;
     pub use super::onset::{Onset, OnsetFunction};
+    pub use super::sine::{Sine, SortBy};
 }
 
 /// Spectral transformation.

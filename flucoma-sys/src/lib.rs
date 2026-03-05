@@ -16,6 +16,7 @@ cpp! {{
     #define FMT_HEADER_ONLY 1
     #include <complex>
     #include <flucoma/data/FluidMemory.hpp>
+    #include <flucoma/algorithms/public/Envelope.hpp>
     #include <flucoma/algorithms/public/Loudness.hpp>
     #include <flucoma/algorithms/public/STFT.hpp>
     #include <flucoma/algorithms/public/MelBands.hpp>
@@ -25,11 +26,64 @@ cpp! {{
     #include <flucoma/algorithms/public/NMF.hpp>
     #include <flucoma/algorithms/public/NMFMorph.hpp>
     #include <flucoma/algorithms/public/EnvelopeSegmentation.hpp>
+    #include <flucoma/algorithms/public/NoveltyFeature.hpp>
     #include <flucoma/algorithms/public/NoveltySegmentation.hpp>
+    #include <flucoma/algorithms/public/SineFeature.hpp>
     #include <flucoma/algorithms/public/TransientSegmentation.hpp>
     using namespace fluid;
     using namespace fluid::algorithm;
 }}
+
+// -------------------------------------------------------------------------------------------------
+// Envelope (AmpFeature)
+
+pub fn amp_feature_create() -> *mut u8 {
+    unsafe {
+        cpp!([] -> *mut u8 as "void*" {
+            return static_cast<void*>(new Envelope());
+        })
+    }
+}
+
+pub fn amp_feature_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "Envelope*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn amp_feature_init(ptr: *mut u8, floor: f64, hi_pass_freq: f64) {
+    unsafe {
+        cpp!([ptr as "Envelope*", floor as "double", hi_pass_freq as "double"] {
+            ptr->init(floor, hi_pass_freq);
+        })
+    }
+}
+
+pub fn amp_feature_process_sample(
+    ptr: *mut u8,
+    input: f64,
+    floor: f64,
+    fast_ramp_up: FlucomaIndex,
+    slow_ramp_up: FlucomaIndex,
+    fast_ramp_down: FlucomaIndex,
+    slow_ramp_down: FlucomaIndex,
+    hi_pass_freq: f64,
+) -> f64 {
+    unsafe {
+        cpp!([
+            ptr as "Envelope*",
+            input as "double", floor as "double",
+            fast_ramp_up as "ptrdiff_t", slow_ramp_up as "ptrdiff_t",
+            fast_ramp_down as "ptrdiff_t", slow_ramp_down as "ptrdiff_t",
+            hi_pass_freq as "double"
+        ] -> f64 as "double" {
+            return ptr->processSample(input, floor, fast_ramp_up, slow_ramp_up,
+                                      fast_ramp_down, slow_ramp_down, hi_pass_freq);
+        })
+    }
+}
 
 // -------------------------------------------------------------------------------------------------
 // Loudness
@@ -688,6 +742,122 @@ pub fn novelty_seg_process_frame(
         ] -> f64 as "double" {
             FluidTensorView<double, 1> in_v(const_cast<double*>(input), 0, input_len);
             return ptr->processFrame(in_v, threshold, min_slice_length, FluidDefaultAllocator());
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// NoveltyFeature
+
+pub fn novelty_feature_create(
+    max_kernel_size: FlucomaIndex,
+    max_dims: FlucomaIndex,
+    max_filter_size: FlucomaIndex,
+) -> *mut u8 {
+    unsafe {
+        cpp!([
+            max_kernel_size as "ptrdiff_t", max_dims as "ptrdiff_t", max_filter_size as "ptrdiff_t"
+        ] -> *mut u8 as "void*" {
+            return static_cast<void*>(
+                new NoveltyFeature(max_kernel_size, max_dims, max_filter_size, FluidDefaultAllocator()));
+        })
+    }
+}
+
+pub fn novelty_feature_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "NoveltyFeature*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn novelty_feature_init(
+    ptr: *mut u8,
+    kernel_size: FlucomaIndex,
+    filter_size: FlucomaIndex,
+    n_dims: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "NoveltyFeature*",
+            kernel_size as "ptrdiff_t", filter_size as "ptrdiff_t", n_dims as "ptrdiff_t"
+        ] {
+            ptr->init(kernel_size, filter_size, n_dims, FluidDefaultAllocator());
+        })
+    }
+}
+
+pub fn novelty_feature_process_frame(
+    ptr: *mut u8,
+    input: *const f64,
+    input_len: FlucomaIndex,
+) -> f64 {
+    unsafe {
+        cpp!([
+            ptr as "NoveltyFeature*",
+            input as "const double*", input_len as "ptrdiff_t"
+        ] -> f64 as "double" {
+            FluidTensorView<double, 1> in_v(const_cast<double*>(input), 0, input_len);
+            return ptr->processFrame(in_v, FluidDefaultAllocator());
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// SineFeature
+
+pub fn sine_create() -> *mut u8 {
+    unsafe {
+        cpp!([] -> *mut u8 as "void*" {
+            return static_cast<void*>(new SineFeature(FluidDefaultAllocator()));
+        })
+    }
+}
+
+pub fn sine_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "SineFeature*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn sine_init(ptr: *mut u8, window_size: FlucomaIndex, fft_size: FlucomaIndex) {
+    unsafe {
+        cpp!([ptr as "SineFeature*", window_size as "ptrdiff_t", fft_size as "ptrdiff_t"] {
+            ptr->init(window_size, fft_size);
+        })
+    }
+}
+
+pub fn sine_process_frame(
+    ptr: *mut u8,
+    in_complex: *const f64,
+    in_len: FlucomaIndex,
+    freq_out: *mut f64,
+    mag_out: *mut f64,
+    out_len: FlucomaIndex,
+    sample_rate: f64,
+    detection_threshold: f64,
+    sort_by: FlucomaIndex,
+) -> FlucomaIndex {
+    unsafe {
+        cpp!([
+            ptr as "SineFeature*",
+            in_complex as "const double*", in_len as "ptrdiff_t",
+            freq_out as "double*", mag_out as "double*", out_len as "ptrdiff_t",
+            sample_rate as "double", detection_threshold as "double",
+            sort_by as "ptrdiff_t"
+        ] -> FlucomaIndex as "ptrdiff_t" {
+            auto* cptr = reinterpret_cast<std::complex<double>*>(
+                const_cast<double*>(in_complex));
+            FluidTensorView<std::complex<double>, 1> in_v(cptr, 0, in_len);
+            FluidTensorView<double, 1> freq_v(freq_out, 0, out_len);
+            FluidTensorView<double, 1> mag_v(mag_out, 0, out_len);
+            return ptr->processFrame(in_v, freq_v, mag_v, sample_rate,
+                                     detection_threshold, sort_by,
+                                     FluidDefaultAllocator());
         })
     }
 }
