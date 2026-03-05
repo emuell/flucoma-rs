@@ -1,24 +1,24 @@
-use flucoma_sys::{env_seg_create, env_seg_destroy, env_seg_init, env_seg_process_sample};
+use flucoma_sys::{amp_seg_create, amp_seg_destroy, amp_seg_init, amp_seg_process_sample};
 
 // -------------------------------------------------------------------------------------------------
 
 /// Amplitude-envelope-based audio segmenter, operating sample by sample.
 ///
 /// Two-phase setup:
-/// 1. [`EnvelopeSegmentation::new`] -- allocates and initialises the follower.
-/// 2. Call [`EnvelopeSegmentation::process_sample`] per audio sample.
+/// 1. [`AmpSegmentation::new`] -- allocates and initialises the follower.
+/// 2. Call [`AmpSegmentation::process_sample`] per audio sample.
 ///
 /// Uses a dual-ramp envelope follower with separate fast/slow attack and
 /// release times, plus on/off thresholds for hysteresis.
 ///
 /// See <https://learn.flucoma.org/reference/ampslice>
-pub struct EnvelopeSegmentation {
+pub struct AmpSegmentation {
     inner: *mut u8,
 }
 
-unsafe impl Send for EnvelopeSegmentation {}
+unsafe impl Send for AmpSegmentation {}
 
-impl EnvelopeSegmentation {
+impl AmpSegmentation {
     /// Create and initialise an envelope segmenter.
     ///
     /// # Arguments
@@ -28,11 +28,11 @@ impl EnvelopeSegmentation {
     /// # Errors
     /// Returns an error string if allocation fails.
     pub fn new(floor: f64, hi_pass_freq: f64) -> Result<Self, &'static str> {
-        let inner = env_seg_create();
+        let inner = amp_seg_create();
         if inner.is_null() {
-            return Err("failed to create EnvelopeSegmentation instance");
+            return Err("failed to create AmpSegmentation instance");
         }
-        env_seg_init(inner, floor, hi_pass_freq);
+        amp_seg_init(inner, floor, hi_pass_freq);
         Ok(Self { inner })
     }
 
@@ -65,7 +65,7 @@ impl EnvelopeSegmentation {
         hi_pass_freq: f64,
         debounce: usize,
     ) -> f64 {
-        env_seg_process_sample(
+        amp_seg_process_sample(
             self.inner,
             sample,
             on_threshold,
@@ -81,9 +81,9 @@ impl EnvelopeSegmentation {
     }
 }
 
-impl Drop for EnvelopeSegmentation {
+impl Drop for AmpSegmentation {
     fn drop(&mut self) {
-        env_seg_destroy(self.inner);
+        amp_seg_destroy(self.inner);
     }
 }
 
@@ -95,7 +95,7 @@ mod tests {
 
     #[test]
     fn env_seg_silence_returns_zero() {
-        let mut seg = EnvelopeSegmentation::new(-60.0, 20.0).unwrap();
+        let mut seg = AmpSegmentation::new(-60.0, 20.0).unwrap();
         for _ in 0..100 {
             let val = seg.process_sample(0.0, -30.0, -40.0, -60.0, 10, 100, 10, 100, 20.0, 10);
             assert_eq!(val, 0.0, "silence should produce 0.0, got {val}");
@@ -104,7 +104,7 @@ mod tests {
 
     #[test]
     fn env_seg_loud_signal_can_trigger() {
-        let mut seg = EnvelopeSegmentation::new(-60.0, 20.0).unwrap();
+        let mut seg = AmpSegmentation::new(-60.0, 20.0).unwrap();
         let silence = vec![0.0f64; 10];
         let peak: Vec<f64> = (0..10).map(|i| ((10 - i) as f64) * 0.1).collect();
         let mut triggered = false;
