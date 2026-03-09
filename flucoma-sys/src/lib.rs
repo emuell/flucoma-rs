@@ -567,7 +567,7 @@ pub fn onset_process_frame(
 }
 
 // -------------------------------------------------------------------------------------------------
-// OnsetSegmentation
+// OnsetSlice
 
 pub fn onset_seg_create(max_size: FlucomaIndex, max_filter_size: FlucomaIndex) -> *mut u8 {
     unsafe {
@@ -626,7 +626,7 @@ pub fn onset_seg_process_frame(
 }
 
 // -------------------------------------------------------------------------------------------------
-// AmpSegmentation
+// AmpSlice
 
 pub fn amp_seg_create() -> *mut u8 {
     unsafe {
@@ -686,7 +686,7 @@ pub fn amp_seg_process_sample(
 }
 
 // -------------------------------------------------------------------------------------------------
-// NoveltySegmentation
+// NoveltySlice
 
 pub fn novelty_seg_create(
     max_kernel_size: FlucomaIndex,
@@ -863,7 +863,7 @@ pub fn sine_process_frame(
 }
 
 // -------------------------------------------------------------------------------------------------
-// TransientSegmentation
+// TransientSlice
 
 pub fn transient_seg_create(
     max_order: FlucomaIndex,

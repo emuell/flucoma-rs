@@ -92,8 +92,8 @@ pub mod transformation {
 
 /// Onset segmentation.
 pub mod segmentation {
-    pub use super::amp_seg::AmpSegmentation;
-    pub use super::novelty_seg::NoveltySegmentation;
-    pub use super::onset_seg::OnsetSegmentation;
-    pub use super::transient_seg::TransientSegmentation;
+    pub use super::amp_seg::AmpSlice;
+    pub use super::novelty_seg::NoveltySlice;
+    pub use super::onset_seg::OnsetSlice;
+    pub use super::transient_seg::TransientSlice;
 }

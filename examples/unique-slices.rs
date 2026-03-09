@@ -14,7 +14,7 @@ use std::{error::Error, fs::File, path::Path};
 use flucoma_rs::{
     analyzation::{MelBands, OnsetFunction},
     fourier::{Stft, WindowType},
-    segmentation::OnsetSegmentation,
+    segmentation::OnsetSlice,
 };
 
 // -------------------------------------------------------------------------------------------------
@@ -24,7 +24,7 @@ const HOP_SIZE: usize = 512;
 const WINDOW_SIZE: usize = 1024;
 const FFT_SIZE: usize = 4096;
 
-// OnsetSegmentation config
+// OnsetSlice config
 const ONSET_FUNCTION: OnsetFunction = OnsetFunction::PowerSpectrum;
 const ONSET_THRESHOLD: f64 = 0.0;
 const ONSET_DEBOUNCE: usize = 0;
@@ -169,7 +169,7 @@ fn read_sample_mono(path: &Path) -> Result<(wav_io::header::WavHeader, Vec<f64>)
 
 // -------------------------------------------------------------------------------------------------
 
-/// Run `OnsetSegmentation` hop-by-hop and return a sorted list of sample boundaries.
+/// Run `OnsetSlice` hop-by-hop and return a sorted list of sample boundaries.
 /// Always includes 0 and `mono.len()` as the outer sentinels.
 fn detect_onsets(mono_sample_data: &[f64]) -> Vec<usize> {
     /// Find first zero crossing in the given frame buffer
@@ -185,7 +185,7 @@ fn detect_onsets(mono_sample_data: &[f64]) -> Vec<usize> {
     }
 
     let mut segmentation =
-        OnsetSegmentation::new(WINDOW_SIZE, FFT_SIZE, FILTER_SIZE).expect("OnsetSegmentation::new");
+        OnsetSlice::new(WINDOW_SIZE, FFT_SIZE, FILTER_SIZE).expect("OnsetSlice::new");
 
     let mut boundaries = vec![0usize];
     let mut frame = vec![0.0f64; WINDOW_SIZE];

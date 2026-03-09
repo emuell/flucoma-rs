@@ -136,7 +136,14 @@ mod tests {
         let input = vec![Complex::default(); fft_size / 2 + 1];
         let mut freqs = vec![0.0f64; 32];
         let mut mags = vec![0.0f64; 32];
-        let count = sine.process_frame(&input, &mut freqs, &mut mags, 44100.0, -60.0, SortBy::Frequency);
+        let count = sine.process_frame(
+            &input,
+            &mut freqs,
+            &mut mags,
+            44100.0,
+            -60.0,
+            SortBy::Frequency,
+        );
         // Zero input produces -inf dB, so nothing should exceed -60 dB threshold
         assert!(count == 0, "expected no peaks for zero input, got {count}");
     }
@@ -150,7 +157,14 @@ mod tests {
         input[100] = Complex::new(100.0, 0.0);
         let mut freqs = vec![0.0f64; 32];
         let mut mags = vec![0.0f64; 32];
-        let count = sine.process_frame(&input, &mut freqs, &mut mags, 44100.0, -60.0, SortBy::Frequency);
+        let count = sine.process_frame(
+            &input,
+            &mut freqs,
+            &mut mags,
+            44100.0,
+            -60.0,
+            SortBy::Frequency,
+        );
         assert!(count >= 1, "expected at least one peak for impulse input");
     }
 }

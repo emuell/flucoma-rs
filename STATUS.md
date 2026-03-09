@@ -30,10 +30,10 @@
 
 ### Audio slicing (`flucoma_rs::segmentation`)
 
-- [x] [`OnsetSegmentation`](https://learn.flucoma.org/reference/onsetslice) as `flucoma_rs::segmentation::OnsetSegmentation` -- segment audio stream at detected onsets
-- [x] [`AmpSegmentation`](https://learn.flucoma.org/reference/ampslice) as `flucoma_rs::segmentation::AmpSegmentation` -- amplitude-envelope-based segmentation
-- [x] [`NoveltySegmentation`](https://learn.flucoma.org/reference/noveltyslice) as `flucoma_rs::segmentation::NoveltySegmentation` -- novelty-curve segmentation
-- [x] [`TransientSegmentation`](https://learn.flucoma.org/reference/transientslice) as `flucoma_rs::segmentation::TransientSegmentation` -- transient detector and segmenter
+- [x] [`OnsetSlice`](https://learn.flucoma.org/reference/onsetslice) as `flucoma_rs::segmentation::OnsetSlice` -- segment audio stream at detected onsets
+- [x] [`AmpSlice`](https://learn.flucoma.org/reference/ampslice) as `flucoma_rs::segmentation::AmpSlice` -- amplitude-envelope-based segmentation
+- [x] [`NoveltySlice`](https://learn.flucoma.org/reference/noveltyslice) as `flucoma_rs::segmentation::NoveltySlice` -- novelty-curve segmentation
+- [x] [`TransientSlice`](https://learn.flucoma.org/reference/transientslice) as `flucoma_rs::segmentation::TransientSlice` -- transient detector and segmenter
 
 ### Machine Learning & Statistics (`flucoma_rs::data`)
 

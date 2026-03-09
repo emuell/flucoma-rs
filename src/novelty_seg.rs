@@ -7,22 +7,22 @@ use flucoma_sys::{
 /// Novelty-curve segmenter for feature streams.
 ///
 /// Two-phase setup:
-/// 1. [`NoveltySegmentation::new`] -- allocates buffers and initialises the detector.
-/// 2. Call [`NoveltySegmentation::process_frame`] per feature frame.
+/// 1. [`NoveltySlice::new`] -- allocates buffers and initialises the detector.
+/// 2. Call [`NoveltySlice::process_frame`] per feature frame.
 ///
 /// Each call to `process_frame` takes a feature vector of length `n_dims` (e.g.
 /// mel bands or MFCCs). The algorithm computes a self-similarity novelty curve
 /// internally and returns 1.0 when a peak above `threshold` is detected.
 ///
 /// See <https://learn.flucoma.org/reference/noveltyslice>
-pub struct NoveltySegmentation {
+pub struct NoveltySlice {
     inner: *mut u8,
     n_dims: usize,
 }
 
-unsafe impl Send for NoveltySegmentation {}
+unsafe impl Send for NoveltySlice {}
 
-impl NoveltySegmentation {
+impl NoveltySlice {
     /// Create and initialise a novelty segmenter.
     ///
     /// # Arguments
@@ -49,7 +49,7 @@ impl NoveltySegmentation {
 
         let inner = novelty_seg_create(kernel_size as isize, n_dims as isize, filter_size as isize);
         if inner.is_null() {
-            return Err("failed to create NoveltySegmentation instance");
+            return Err("failed to create NoveltySlice instance");
         }
         novelty_seg_init(
             inner,
@@ -94,7 +94,7 @@ impl NoveltySegmentation {
     }
 }
 
-impl Drop for NoveltySegmentation {
+impl Drop for NoveltySlice {
     fn drop(&mut self) {
         novelty_seg_destroy(self.inner);
     }
@@ -108,22 +108,22 @@ mod tests {
 
     #[test]
     fn novelty_seg_zero_input_returns_zero_or_one() {
-        let mut seg = NoveltySegmentation::new(3, 13, 1).unwrap();
+        let mut slice = NoveltySlice::new(3, 13, 1).unwrap();
         let frame = vec![0.0f64; 13];
-        let val = seg.process_frame(&frame, 0.5, 2);
+        let val = slice.process_frame(&frame, 0.5, 2);
         assert!(val == 0.0 || val == 1.0, "expected 0.0 or 1.0, got {val}");
     }
 
     #[test]
     fn novelty_seg_changing_input_can_trigger() {
         const N_DIMS: usize = 13;
-        let mut seg = NoveltySegmentation::new(3, N_DIMS, 7).unwrap();
+        let mut slice = NoveltySlice::new(3, N_DIMS, 7).unwrap();
         let silence = vec![0.0f64; N_DIMS];
         let loud: Vec<f64> = (0..N_DIMS).map(|i| (i as f64) * 0.1).collect();
         let mut triggered = false;
         for i in 0..100 {
             let frame = if i % 20 < 10 { &silence } else { &loud };
-            let val = seg.process_frame(frame, 0.01, 1);
+            let val = slice.process_frame(frame, 0.01, 1);
             if val == 1.0 {
                 triggered = true;
                 break;

@@ -104,7 +104,10 @@ mod tests {
         let mut nf = Novelty::new(3, 13, 1).unwrap();
         let frame = vec![0.0f64; 13];
         let val = nf.process_frame(&frame);
-        assert!(val.is_finite(), "expected finite value for zero input, got {val}");
+        assert!(
+            val.is_finite(),
+            "expected finite value for zero input, got {val}"
+        );
     }
 
     #[test]
@@ -119,6 +122,9 @@ mod tests {
             values.push(nf.process_frame(frame));
         }
         let all_same = values.windows(2).all(|w| w[0] == w[1]);
-        assert!(!all_same, "alternating input should produce varying novelty values");
+        assert!(
+            !all_same,
+            "alternating input should produce varying novelty values"
+        );
     }
 }

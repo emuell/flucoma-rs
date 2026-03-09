@@ -5,20 +5,20 @@ use flucoma_sys::{amp_seg_create, amp_seg_destroy, amp_seg_init, amp_seg_process
 /// Amplitude-envelope-based audio segmenter, operating sample by sample.
 ///
 /// Two-phase setup:
-/// 1. [`AmpSegmentation::new`] -- allocates and initialises the follower.
-/// 2. Call [`AmpSegmentation::process_sample`] per audio sample.
+/// 1. [`AmpSlice::new`] -- allocates and initialises the follower.
+/// 2. Call [`AmpSlice::process_sample`] per audio sample.
 ///
 /// Uses a dual-ramp envelope follower with separate fast/slow attack and
 /// release times, plus on/off thresholds for hysteresis.
 ///
 /// See <https://learn.flucoma.org/reference/ampslice>
-pub struct AmpSegmentation {
+pub struct AmpSlice {
     inner: *mut u8,
 }
 
-unsafe impl Send for AmpSegmentation {}
+unsafe impl Send for AmpSlice {}
 
-impl AmpSegmentation {
+impl AmpSlice {
     /// Create and initialise an envelope segmenter.
     ///
     /// # Arguments
@@ -30,7 +30,7 @@ impl AmpSegmentation {
     pub fn new(floor: f64, hi_pass_freq: f64) -> Result<Self, &'static str> {
         let inner = amp_seg_create();
         if inner.is_null() {
-            return Err("failed to create AmpSegmentation instance");
+            return Err("failed to create AmpSlice instance");
         }
         amp_seg_init(inner, floor, hi_pass_freq);
         Ok(Self { inner })
@@ -81,7 +81,7 @@ impl AmpSegmentation {
     }
 }
 
-impl Drop for AmpSegmentation {
+impl Drop for AmpSlice {
     fn drop(&mut self) {
         amp_seg_destroy(self.inner);
     }
@@ -95,23 +95,23 @@ mod tests {
 
     #[test]
     fn env_seg_silence_returns_zero() {
-        let mut seg = AmpSegmentation::new(-60.0, 20.0).unwrap();
+        let mut slice = AmpSlice::new(-60.0, 20.0).unwrap();
         for _ in 0..100 {
-            let val = seg.process_sample(0.0, -30.0, -40.0, -60.0, 10, 100, 10, 100, 20.0, 10);
+            let val = slice.process_sample(0.0, -30.0, -40.0, -60.0, 10, 100, 10, 100, 20.0, 10);
             assert_eq!(val, 0.0, "silence should produce 0.0, got {val}");
         }
     }
 
     #[test]
     fn env_seg_loud_signal_can_trigger() {
-        let mut seg = AmpSegmentation::new(-60.0, 20.0).unwrap();
+        let mut slice = AmpSlice::new(-60.0, 20.0).unwrap();
         let silence = vec![0.0f64; 10];
         let peak: Vec<f64> = (0..10).map(|i| ((10 - i) as f64) * 0.1).collect();
         let mut triggered = false;
         for i in 0..100 {
             let buffer = if i % 20 < 10 { &silence } else { &peak };
             let frame = buffer[i % 20 % buffer.len()];
-            let val = seg.process_sample(frame, -10.0, -40.0, -60.0, 1, 2, 2, 4, 20.0, 1);
+            let val = slice.process_sample(frame, -10.0, -40.0, -60.0, 1, 2, 2, 4, 20.0, 1);
             if val == 1.0 {
                 triggered = true;
                 break;
