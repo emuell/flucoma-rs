@@ -150,6 +150,20 @@ impl NMFFilter {
         random_seed: i64,
     ) -> NmfResult {
         assert!(rank > 0, "rank must be > 0");
+        assert_eq!(
+            spectrogram.cols(),
+            self.n_bins,
+            "spectrogram cols ({}) must equal n_bins ({})",
+            spectrogram.cols(),
+            self.n_bins
+        );
+        assert_eq!(
+            rank,
+            self.rank,
+            "rank ({}) must equal construction rank ({})",
+            rank,
+            self.rank
+        );
         let n_frames = spectrogram.rows();
         let n_bins = spectrogram.cols();
         let mut w = vec![0.0f64; rank * n_bins];

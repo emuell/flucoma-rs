@@ -19,6 +19,7 @@ pub struct OnsetSlice {
     inner: *mut u8,
     window_size: usize,
     fft_size: usize,
+    max_filter_size: usize,
 }
 
 unsafe impl Send for OnsetSlice {}
@@ -60,6 +61,7 @@ impl OnsetSlice {
             inner,
             window_size,
             fft_size,
+            max_filter_size: max_filter,
         })
     }
 
@@ -93,6 +95,12 @@ impl OnsetSlice {
             "input length ({}) must be >= window_size + frame_delta ({})",
             input.len(),
             min_len
+        );
+        assert!(
+            filter_size <= self.max_filter_size,
+            "filter_size ({}) must be <= max_filter_size ({})",
+            filter_size,
+            self.max_filter_size
         );
         onset_seg_process_frame(
             self.inner,

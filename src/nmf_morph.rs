@@ -22,6 +22,7 @@ use crate::matrix::Matrix;
 /// See <https://learn.flucoma.org/reference/nmfmorph>
 pub struct NMFMorph {
     inner: *mut u8,
+    max_fft_size: usize,
     num_bins: usize,
     buf: Vec<Complex>,
 }
@@ -43,6 +44,7 @@ impl NMFMorph {
         }
         Ok(Self {
             inner,
+            max_fft_size,
             num_bins: 0,
             buf: Vec::new(),
         })
@@ -91,8 +93,18 @@ impl NMFMorph {
         if fft_size < window_size {
             return Err("fft_size must be >= win_size");
         }
+        if fft_size > self.max_fft_size {
+            return Err("fft_size must be <= max_fft_size");
+        }
         if hop_size == 0 {
             return Err("hop_size must be > 0");
+        }
+        let n_bins = fft_size / 2 + 1;
+        if w1.cols() != n_bins {
+            return Err("w1.cols() must equal fft_size / 2 + 1");
+        }
+        if w2.cols() != n_bins {
+            return Err("w2.cols() must equal fft_size / 2 + 1");
         }
         nmf_morph_init(
             self.inner,

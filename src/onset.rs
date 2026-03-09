@@ -46,6 +46,7 @@ pub struct Onset {
     inner: *mut u8,
     window_size: usize,
     fft_size: usize,
+    max_filter_size: usize,
 }
 
 unsafe impl Send for Onset {}
@@ -87,6 +88,7 @@ impl Onset {
             inner,
             window_size,
             fft_size,
+            max_filter_size: max_filter,
         })
     }
 
@@ -118,6 +120,12 @@ impl Onset {
             "input length ({}) must be >= window_size + frame_delta ({})",
             input.len(),
             min_len
+        );
+        assert!(
+            filter_size <= self.max_filter_size,
+            "filter_size ({}) must be <= max_filter_size ({})",
+            filter_size,
+            self.max_filter_size
         );
         onset_process_frame(
             self.inner,
