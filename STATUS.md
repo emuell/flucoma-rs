@@ -16,10 +16,10 @@
 
 ### Audio source separation (`flucoma_rs::decomposition`)
 
-- [ ] [`HPSS`](https://learn.flucoma.org/reference/hpss) -- Harmonic-Percussive Source Separation
-- [ ] [`SineExtraction`](https://learn.flucoma.org/reference/sines) -- sinusoids + residual decomposition
-- [ ] [`TransientExtraction`](https://learn.flucoma.org/reference/transients) -- transient + residual decomposition
-- [ ] [`NMF`](https://learn.flucoma.org/reference/bufnmf) -- Non-negative Matrix Factorization
+- [x] [`HPSS`](https://learn.flucoma.org/reference/hpss) as `flucoma_rs::decomposition::Hpss` -- Harmonic-Percussive Source Separation
+- [x] [`SineExtraction`](https://learn.flucoma.org/reference/sines) as `flucoma_rs::decomposition::SineExtraction` -- sinusoids + residual decomposition
+- [x] [`TransientExtraction`](https://learn.flucoma.org/reference/transients) as `flucoma_rs::decomposition::TransientExtraction` -- transient + residual decomposition
+- [x] [`NMF`](https://learn.flucoma.org/reference/bufnmf) as `flucoma_rs::decomposition::Nmf` -- Non-negative Matrix Factorization
 
 ### Audio transformation (`flucoma_rs::transformation`)
 
