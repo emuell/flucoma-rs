@@ -35,5 +35,22 @@
 		"sourceLanguages": ["rust"],
 		"request": "launch",
 		"adapter": "CodeLLDB"
+	},
+
+	{
+		"label": "Build & Debug Example: Decompose",
+		"build": {
+			"command": "cargo",
+			"args": ["build", "--example", "decompose"]
+		},
+		"program": "$ZED_WORKTREE_ROOT/target/debug/examples/decompose",
+		"args": [
+			"--mode",
+			"hpss", // or sine
+			"$ZED_WORKTREE_ROOT/vendor/flucoma-core/Resources/AudioFiles/Tremblay-AaS-AcousticStrums-M.wav"
+		],
+		"sourceLanguages": ["rust"],
+		"request": "launch",
+		"adapter": "CodeLLDB"
 	}
 ]

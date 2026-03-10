@@ -31,6 +31,21 @@ cargo run --release --example unique-slices -- input.wav
 
 Output: `<input_stem>_slices/slice1_<start>_<end>.wav`, etc.
 
+### `decompose` -- spectral layer separation
+
+Separates an audio file into two layers using a spectral decomposition algorithm. Two modes:
+
+- `hpss` (default) -- [HPSS](https://learn.flucoma.org/reference/hpss/) median-filter harmonic/percussive separation
+- `sine` -- [SineExtraction](https://learn.flucoma.org/reference/sineextraction/) partial-tracking sinusoidal/residual separation
+
+```sh
+cargo run --release --example decompose -- input.wav
+cargo run --release --example decompose -- --mode sine input.wav
+```
+
+Output (hpss): `<input_stem>_harmonic.wav` and `<input_stem>_percussive.wav`.
+Output (sine): `<input_stem>_sines.wav` and `<input_stem>_residual.wav`.
+
 ### `transform` -- spectral crossfade
 
 Morphs two audio files together using spectral interpolation, sweeping linearly from file 1 to file 2. Two modes:
