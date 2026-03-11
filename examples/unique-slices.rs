@@ -123,11 +123,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let file_path = output_path.join(&file_name);
 
         let sample_start = slice.start * channel_count;
-        let mut sample_end = (slice.end * channel_count).min(raw_samples.len());
-        if (sample_end - sample_start) & 1 == 1 {
-            // `wav_io` expects sample counts to be even for padding
-            sample_end -= 1;
-        }
+        let sample_end = (slice.end * channel_count).min(raw_samples.len());
         let slice_data = raw_samples[sample_start..sample_end].to_vec();
 
         wav_io::write_to_file(
