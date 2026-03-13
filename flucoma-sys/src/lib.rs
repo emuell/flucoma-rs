@@ -23,6 +23,11 @@ cpp! {{
     #include <flucoma/algorithms/public/OnsetDetectionFunctions.hpp>
     #include <flucoma/algorithms/public/OnsetSegmentation.hpp>
     #include <flucoma/algorithms/public/AudioTransport.hpp>
+    #include <flucoma/algorithms/public/DataSetQuery.hpp>
+    #include <flucoma/algorithms/public/Grid.hpp>
+    #include <flucoma/algorithms/public/KDTree.hpp>
+    #include <flucoma/algorithms/public/KMeans.hpp>
+    #include <flucoma/algorithms/public/MDS.hpp>
     #include <flucoma/algorithms/public/MultiStats.hpp>
     #include <flucoma/algorithms/public/Normalization.hpp>
     #include <flucoma/algorithms/public/NMF.hpp>
@@ -30,6 +35,7 @@ cpp! {{
     #include <flucoma/algorithms/public/PCA.hpp>
     #include <flucoma/algorithms/public/RobustScaling.hpp>
     #include <flucoma/algorithms/public/RunningStats.hpp>
+    #include <flucoma/algorithms/public/SKMeans.hpp>
     #include <flucoma/algorithms/public/Standardization.hpp>
     #include <flucoma/algorithms/public/EnvelopeSegmentation.hpp>
     #include <flucoma/algorithms/public/NoveltyFeature.hpp>
@@ -1669,6 +1675,399 @@ pub fn pca_dims(ptr: *mut u8) -> FlucomaIndex {
     unsafe {
         cpp!([ptr as "PCA*"] -> FlucomaIndex as "ptrdiff_t" {
             return ptr->dims();
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// KDTree
+
+pub fn kdtree_create(dims: FlucomaIndex) -> *mut u8 {
+    unsafe {
+        cpp!([dims as "ptrdiff_t"] -> *mut u8 as "void*" {
+            KDTree::DataSet data_set(dims);
+            return static_cast<void*>(new KDTree(data_set));
+        })
+    }
+}
+
+pub fn kdtree_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "KDTree*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn kdtree_add_node(ptr: *mut u8, id: *const u8, data: *const f64, len: FlucomaIndex) {
+    unsafe {
+        cpp!([ptr as "KDTree*", id as "const char*", data as "const double*", len as "ptrdiff_t"] {
+            FluidTensorView<double, 1> data_v(const_cast<double*>(data), 0, len);
+            auto flat = ptr->toFlat();
+            KDTree::DataSet data_set(flat.ids, flat.data);
+            data_set.add(std::string(id), data_v);
+            *ptr = KDTree(data_set);
+        })
+    }
+}
+
+pub fn kdtree_k_nearest(
+    ptr: *mut u8,
+    input: *const f64,
+    input_len: FlucomaIndex,
+    k: FlucomaIndex,
+    radius: f64,
+    out_distances: *mut f64,
+    out_ids: *mut *const u8,
+) {
+    unsafe {
+        cpp!([
+            ptr as "KDTree*",
+            input as "const double*",
+            input_len as "ptrdiff_t",
+            k as "ptrdiff_t",
+            radius as "double",
+            out_distances as "double*",
+            out_ids as "const char**"
+        ] {
+            FluidTensorView<double, 1> in_v(const_cast<double*>(input), 0, input_len);
+            Allocator alloc{};
+            auto result = ptr->kNearest(in_v, k, radius, alloc);
+            for (fluid::index i = 0; i < static_cast<fluid::index>(result.first.size()); ++i) {
+                out_distances[i] = result.first[i];
+                out_ids[i] = result.second[i]->c_str();
+            }
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// MDS
+
+pub fn mds_create() -> *mut u8 {
+    unsafe {
+        cpp!([] -> *mut u8 as "void*" {
+            return static_cast<void*>(new MDS());
+        })
+    }
+}
+
+pub fn mds_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "MDS*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn mds_process(
+    ptr: *mut u8,
+    input: *const f64,
+    rows: FlucomaIndex,
+    cols: FlucomaIndex,
+    output: *mut f64,
+    target_dims: FlucomaIndex,
+    distance: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "MDS*",
+            input as "const double*",
+            rows as "ptrdiff_t",
+            cols as "ptrdiff_t",
+            output as "double*",
+            target_dims as "ptrdiff_t",
+            distance as "ptrdiff_t"
+        ] {
+            FluidTensorView<double, 2> in_v(const_cast<double*>(input), 0, rows, cols);
+            FluidTensorView<double, 2> out_v(output, 0, rows, target_dims);
+            ptr->process(in_v, out_v, distance, target_dims);
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// KMeans
+
+pub fn kmeans_create() -> *mut u8 {
+    unsafe {
+        cpp!([] -> *mut u8 as "void*" {
+            return static_cast<void*>(new KMeans());
+        })
+    }
+}
+
+pub fn kmeans_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "KMeans*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn kmeans_fit(
+    ptr: *mut u8,
+    input: *const f64,
+    rows: FlucomaIndex,
+    cols: FlucomaIndex,
+    k: FlucomaIndex,
+    max_iter: FlucomaIndex,
+    init_method: FlucomaIndex,
+    seed: FlucomaIndex,
+    means_out: *mut f64,
+    assignments_out: *mut FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "KMeans*",
+            input as "const double*",
+            rows as "ptrdiff_t",
+            cols as "ptrdiff_t",
+            k as "ptrdiff_t",
+            max_iter as "ptrdiff_t",
+            init_method as "ptrdiff_t",
+            seed as "ptrdiff_t",
+            means_out as "double*",
+            assignments_out as "ptrdiff_t*"
+        ] {
+            FluidDataSet<std::string, double, 1> ds(cols);
+            for (ptrdiff_t r = 0; r < rows; ++r) {
+                RealVector point(cols);
+                for (ptrdiff_t c = 0; c < cols; ++c) point(c) = input[r * cols + c];
+                ds.add(std::to_string(r), point);
+            }
+
+            auto init = static_cast<KMeans::InitMethod>(init_method);
+            ptr->train(ds, k, max_iter, init, seed);
+
+            FluidTensor<double, 2> means(k, cols);
+            ptr->getMeans(means);
+            for (ptrdiff_t i = 0; i < k * cols; ++i) means_out[i] = means.data()[i];
+
+            FluidTensor<fluid::index, 1> assignments(rows);
+            ptr->getAssignments(assignments);
+            for (ptrdiff_t i = 0; i < rows; ++i) assignments_out[i] = assignments(i);
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// SKMeans
+
+pub fn skmeans_create() -> *mut u8 {
+    unsafe {
+        cpp!([] -> *mut u8 as "void*" {
+            return static_cast<void*>(new SKMeans());
+        })
+    }
+}
+
+pub fn skmeans_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "SKMeans*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn skmeans_fit(
+    ptr: *mut u8,
+    input: *const f64,
+    rows: FlucomaIndex,
+    cols: FlucomaIndex,
+    k: FlucomaIndex,
+    max_iter: FlucomaIndex,
+    init_method: FlucomaIndex,
+    seed: FlucomaIndex,
+    means_out: *mut f64,
+    assignments_out: *mut FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "SKMeans*",
+            input as "const double*",
+            rows as "ptrdiff_t",
+            cols as "ptrdiff_t",
+            k as "ptrdiff_t",
+            max_iter as "ptrdiff_t",
+            init_method as "ptrdiff_t",
+            seed as "ptrdiff_t",
+            means_out as "double*",
+            assignments_out as "ptrdiff_t*"
+        ] {
+            FluidDataSet<std::string, double, 1> ds(cols);
+            for (ptrdiff_t r = 0; r < rows; ++r) {
+                RealVector point(cols);
+                for (ptrdiff_t c = 0; c < cols; ++c) point(c) = input[r * cols + c];
+                ds.add(std::to_string(r), point);
+            }
+
+            auto init = static_cast<SKMeans::InitMethod>(init_method);
+            ptr->train(ds, k, max_iter, init, seed);
+
+            FluidTensor<double, 2> means(k, cols);
+            ptr->getMeans(means);
+            for (ptrdiff_t i = 0; i < k * cols; ++i) means_out[i] = means.data()[i];
+
+            FluidTensor<fluid::index, 1> assignments(rows);
+            ptr->getAssignments(assignments);
+            for (ptrdiff_t i = 0; i < rows; ++i) assignments_out[i] = assignments(i);
+        })
+    }
+}
+
+pub fn skmeans_encode(
+    ptr: *mut u8,
+    input: *const f64,
+    rows: FlucomaIndex,
+    cols: FlucomaIndex,
+    alpha: f64,
+    out: *mut f64,
+    out_cols: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "SKMeans*",
+            input as "const double*",
+            rows as "ptrdiff_t",
+            cols as "ptrdiff_t",
+            alpha as "double",
+            out as "double*",
+            out_cols as "ptrdiff_t"
+        ] {
+            FluidTensorView<double, 2> in_v(const_cast<double*>(input), 0, rows, cols);
+            FluidTensorView<double, 2> out_v(out, 0, rows, out_cols);
+            ptr->encode(in_v, out_v, alpha);
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// Grid
+
+pub fn grid_process(
+    input: *const f64,
+    rows: FlucomaIndex,
+    over_sample: FlucomaIndex,
+    extent: FlucomaIndex,
+    axis: FlucomaIndex,
+    output: *mut f64,
+) -> bool {
+    unsafe {
+        cpp!([
+            input as "const double*",
+            rows as "ptrdiff_t",
+            over_sample as "ptrdiff_t",
+            extent as "ptrdiff_t",
+            axis as "ptrdiff_t",
+            output as "double*"
+        ] -> bool as "bool" {
+            if (rows <= 0) return false;
+            Grid::DataSet ds(2);
+            for (ptrdiff_t r = 0; r < rows; ++r) {
+                RealVector point(2);
+                point(0) = input[r * 2];
+                point(1) = input[r * 2 + 1];
+                ds.add(std::to_string(r), point);
+            }
+            Grid g;
+            auto result = g.process(ds, over_sample, extent, axis);
+            if (result.size() != rows) return false;
+            for (ptrdiff_t r = 0; r < rows; ++r) {
+                RealVector point(2);
+                if (!result.get(std::to_string(r), point)) return false;
+                output[r * 2] = point(0);
+                output[r * 2 + 1] = point(1);
+            }
+            return true;
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// DataSetQuery
+
+pub fn dataset_query_process(
+    input: *const f64,
+    rows: FlucomaIndex,
+    cols: FlucomaIndex,
+    selected_cols: *const FlucomaIndex,
+    selected_count: FlucomaIndex,
+    cond_cols: *const FlucomaIndex,
+    cond_ops: *const FlucomaIndex,
+    cond_vals: *const f64,
+    cond_and_flags: *const FlucomaIndex,
+    cond_count: FlucomaIndex,
+    limit: FlucomaIndex,
+    out_data: *mut f64,
+    out_ids: *mut FlucomaIndex,
+    out_count: *mut FlucomaIndex,
+) -> bool {
+    unsafe {
+        cpp!([
+            input as "const double*",
+            rows as "ptrdiff_t",
+            cols as "ptrdiff_t",
+            selected_cols as "const ptrdiff_t*",
+            selected_count as "ptrdiff_t",
+            cond_cols as "const ptrdiff_t*",
+            cond_ops as "const ptrdiff_t*",
+            cond_vals as "const double*",
+            cond_and_flags as "const ptrdiff_t*",
+            cond_count as "ptrdiff_t",
+            limit as "ptrdiff_t",
+            out_data as "double*",
+            out_ids as "ptrdiff_t*",
+            out_count as "ptrdiff_t*"
+        ] -> bool as "bool" {
+            if (rows <= 0 || cols <= 0 || selected_count <= 0) return false;
+
+            DataSetQuery::DataSet in_ds(cols);
+            for (ptrdiff_t r = 0; r < rows; ++r) {
+                RealVector point(cols);
+                for (ptrdiff_t c = 0; c < cols; ++c) point(c) = input[r * cols + c];
+                in_ds.add(std::to_string(r), point);
+            }
+
+            DataSetQuery query;
+            for (ptrdiff_t i = 0; i < selected_count; ++i) query.addColumn(selected_cols[i]);
+
+            auto op_str = [](ptrdiff_t op) -> const char* {
+                switch (op) {
+                    case 0: return "==";
+                    case 1: return "!=";
+                    case 2: return "<";
+                    case 3: return "<=";
+                    case 4: return ">";
+                    case 5: return ">=";
+                    default: return "==";
+                }
+            };
+
+            for (ptrdiff_t i = 0; i < cond_count; ++i) {
+                bool conjunction = cond_and_flags[i] != 0;
+                if (!query.addCondition(cond_cols[i], op_str(cond_ops[i]), cond_vals[i], conjunction)) {
+                    return false;
+                }
+            }
+
+            if (limit > 0) query.limit(limit);
+
+            DataSetQuery::DataSet current(0);
+            DataSetQuery::DataSet out_ds(selected_count);
+            query.process(in_ds, current, out_ds);
+
+            ptrdiff_t n = out_ds.size();
+            *out_count = n;
+            auto ids = out_ds.getIds();
+            auto data = out_ds.getData();
+            for (ptrdiff_t r = 0; r < n; ++r) {
+                out_ids[r] = std::stoll(ids(r));
+                for (ptrdiff_t c = 0; c < selected_count; ++c) {
+                    out_data[r * selected_count + c] = data(r, c);
+                }
+            }
+            return true;
         })
     }
 }
