@@ -18,8 +18,12 @@ fn main() {
 
     // -- cmake configure + build ALL_BUILD
 
-    let cmake_out = cmake::Config::new(&flucoma_dir)
+    let mut cmake_cfg = cmake::Config::new(&flucoma_dir);
+    cmake_cfg
         .profile(profile)
+        // Do not contact remotes to update already-populated FetchContent deps.
+        // This keeps repeated CI/local builds deterministic and offline-safe.
+        .define("FETCHCONTENT_UPDATES_DISCONNECTED", "ON")
         .define("FOONATHAN_MEMORY_BUILD_TOOLS", "OFF")
         .define("FOONATHAN_MEMORY_BUILD_EXAMPLES", "OFF")
         .define("FOONATHAN_MEMORY_BUILD_TESTS", "OFF")
@@ -36,8 +40,30 @@ fn main() {
             "/EHsc"
         } else {
             ""
-        })
-        .build();
+        });
+
+    // Optional: force fully offline configure (requires pre-populated sources).
+    if env_truthy("FLUCOMA_FULLY_DISCONNECTED") {
+        cmake_cfg.define("FETCHCONTENT_FULLY_DISCONNECTED", "ON");
+    }
+
+    // Optional: point dependencies to local source checkouts to support offline CI.
+    apply_path_override(&mut cmake_cfg, "FLUCOMA_HISS_PATH", "HISS_PATH");
+    apply_path_override(&mut cmake_cfg, "FLUCOMA_EIGEN_PATH", "EIGEN_PATH");
+    apply_path_override(&mut cmake_cfg, "FLUCOMA_SPECTRA_PATH", "SPECTRA_PATH");
+    apply_path_override(&mut cmake_cfg, "FLUCOMA_JSON_PATH", "JSON_PATH");
+    apply_path_override(
+        &mut cmake_cfg,
+        "FLUCOMA_MEMORY_PATH",
+        "FETCHCONTENT_SOURCE_DIR_MEMORY",
+    );
+    apply_path_override(
+        &mut cmake_cfg,
+        "FLUCOMA_FMT_PATH",
+        "FETCHCONTENT_SOURCE_DIR_FMT",
+    );
+
+    let cmake_out = cmake_cfg.build();
 
     let cmake_build = cmake_out.join("build");
     let deps_dir = cmake_build.join("_deps");
@@ -104,6 +130,26 @@ fn main() {
         .flag_if_supported("/std:c++17")
         .flag_if_supported("-std=c++17")
         .build("src/lib.rs");
+}
+
+// -------------------------------------------------------------------------------------------------
+
+fn env_truthy(name: &str) -> bool {
+    std::env::var(name)
+        .map(|v| {
+            let v = v.trim().to_ascii_lowercase();
+            matches!(v.as_str(), "1" | "true" | "on" | "yes")
+        })
+        .unwrap_or(false)
+}
+
+fn apply_path_override(cfg: &mut cmake::Config, env_var: &str, cmake_var: &str) {
+    if let Ok(path) = std::env::var(env_var) {
+        let path = path.trim();
+        if !path.is_empty() {
+            cfg.define(cmake_var, path);
+        }
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
