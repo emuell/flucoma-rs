@@ -26,76 +26,87 @@ impl Default for MultiStatsConfig {
     }
 }
 
-/// Full MultiStats output in channel-major layout.
-///
-/// For each channel, the output is:
-/// `[mean, std, skew, kurtosis, low, mid, high]` for derivative 0,
-/// followed by derivative 1 (if enabled), then derivative 2 (if enabled).
-#[derive(Debug, Clone)]
-pub struct MultiStatsOutput {
-    values: Vec<f64>,
-    num_channels: usize,
-    values_per_channel: usize,
+/// Seven summary statistics for one derivative order.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MultiStatsValues {
+    pub mean: f64,
+    pub std: f64,
+    pub skew: f64,
+    pub kurtosis: f64,
+    pub low: f64,
+    pub mid: f64,
+    pub high: f64,
 }
 
-impl MultiStatsOutput {
-    pub fn values(&self) -> &[f64] {
-        &self.values
-    }
-
-    pub fn num_channels(&self) -> usize {
-        self.num_channels
-    }
-
-    pub fn values_per_channel(&self) -> usize {
-        self.values_per_channel
-    }
-
-    pub fn channel(&self, channel: usize) -> Option<&[f64]> {
-        if channel >= self.num_channels {
-            return None;
+impl MultiStatsValues {
+    pub(crate) fn from_slice(slice: &[f64]) -> Self {
+        Self {
+            mean: slice[0],
+            std: slice[1],
+            skew: slice[2],
+            kurtosis: slice[3],
+            low: slice[4],
+            mid: slice[5],
+            high: slice[6],
         }
-        let start = channel * self.values_per_channel;
-        let end = start + self.values_per_channel;
-        self.values.get(start..end)
     }
 
-    fn get_stat(&self, channel: usize, derivative: usize, stat_index: usize) -> Option<f64> {
-        let channel_data = self.channel(channel)?;
-        let idx = derivative * STATS_PER_DERIVATIVE + stat_index;
-        channel_data.get(idx).copied()
-    }
-
-    pub fn mean(&self, channel: usize, derivative: usize) -> Option<f64> {
-        self.get_stat(channel, derivative, 0)
-    }
-
-    pub fn std(&self, channel: usize, derivative: usize) -> Option<f64> {
-        self.get_stat(channel, derivative, 1)
-    }
-
-    pub fn skew(&self, channel: usize, derivative: usize) -> Option<f64> {
-        self.get_stat(channel, derivative, 2)
-    }
-
-    pub fn kurt(&self, channel: usize, derivative: usize) -> Option<f64> {
-        self.get_stat(channel, derivative, 3)
-    }
-
-    pub fn low(&self, channel: usize, derivative: usize) -> Option<f64> {
-        self.get_stat(channel, derivative, 4)
-    }
-
-    pub fn mid(&self, channel: usize, derivative: usize) -> Option<f64> {
-        self.get_stat(channel, derivative, 5)
-    }
-
-    pub fn high(&self, channel: usize, derivative: usize) -> Option<f64> {
-        self.get_stat(channel, derivative, 6)
+    pub(crate) fn zero() -> Self {
+        Self {
+            mean: 0.0,
+            std: 0.0,
+            skew: 0.0,
+            kurtosis: 0.0,
+            low: 0.0,
+            mid: 0.0,
+            high: 0.0,
+        }
     }
 }
 
-/// Thin safe wrapper for `flucoma::algorithm::MultiStats`.
+/// Per-channel output of `MultiStats`/`BufStats`, with optional derivatives.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MultiStatsOutput {
+    pub stats: MultiStatsValues,
+    pub derivative_1: Option<MultiStatsValues>,
+    pub derivative_2: Option<MultiStatsValues>,
+}
+
+pub(crate) fn zero_outputs(
+    num_channels: usize,
+    num_derivatives: u8,
+) -> Vec<MultiStatsOutput> {
+    let zero = MultiStatsValues::zero();
+    let channel = MultiStatsOutput {
+        stats: zero,
+        derivative_1: (num_derivatives >= 1).then_some(zero),
+        derivative_2: (num_derivatives >= 2).then_some(zero),
+    };
+    vec![channel; num_channels]
+}
+
+pub(crate) fn outputs_from_raw(
+    raw: &[f64],
+    num_channels: usize,
+    num_derivatives: u8,
+) -> Vec<MultiStatsOutput> {
+    let values_per_channel = STATS_PER_DERIVATIVE * (num_derivatives as usize + 1);
+    raw.chunks_exact(values_per_channel)
+        .take(num_channels)
+        .map(|channel| MultiStatsOutput {
+            stats: MultiStatsValues::from_slice(&channel[0..7]),
+            derivative_1: (num_derivatives >= 1)
+                .then(|| MultiStatsValues::from_slice(&channel[7..14])),
+            derivative_2: (num_derivatives >= 2)
+                .then(|| MultiStatsValues::from_slice(&channel[14..21])),
+        })
+        .collect()
+}
+
+/// Computes summary statistics over channel-major multi-channel data.
+///
+/// Input layout is channel-major:
+/// `[channel0_frames..., channel1_frames..., ...]`.
 pub struct MultiStats {
     inner: *mut u8,
     config: MultiStatsConfig,
@@ -124,14 +135,16 @@ impl MultiStats {
         Ok(())
     }
 
-    /// Process channel-major input (`[channel0_frames..., channel1_frames..., ...]`).
+    /// Compute summary statistics over channel-major input data.
+    ///
+    /// `input` layout is `[channel0_frames..., channel1_frames..., ...]`.
     pub fn process(
         &mut self,
         input: &[f64],
         num_frames: usize,
         num_channels: usize,
         weights: Option<&[f64]>,
-    ) -> Result<MultiStatsOutput, &'static str> {
+    ) -> Result<Vec<MultiStatsOutput>, &'static str> {
         if num_frames == 0 {
             return Err("num_frames must be > 0");
         }
@@ -144,16 +157,12 @@ impl MultiStats {
         if num_frames <= self.config.num_derivatives as usize {
             return Err("num_frames must be > num_derivatives");
         }
-        if let Some(w) = weights {
-            if w.len() != num_frames {
+        if let Some(weight_slice) = weights {
+            if weight_slice.len() != num_frames {
                 return Err("weights length must equal num_frames");
             }
-            if !w.iter().copied().any(|x| x > 0.0) {
-                return Ok(MultiStatsOutput {
-                    values: vec![0.0; num_channels * self.values_per_channel()],
-                    num_channels,
-                    values_per_channel: self.values_per_channel(),
-                });
+            if !weight_slice.iter().copied().any(|value| value > 0.0) {
+                return Ok(zero_outputs(num_channels, self.config.num_derivatives));
             }
         }
 
@@ -165,10 +174,10 @@ impl MultiStats {
             self.config.high_percentile,
         );
 
-        let values_per_channel = self.values_per_channel();
-        let mut output = vec![0.0; num_channels * values_per_channel];
+        let values_per_channel = STATS_PER_DERIVATIVE * (self.config.num_derivatives as usize + 1);
+        let mut raw = vec![0.0; num_channels * values_per_channel];
         let (weights_ptr, weights_len) = match weights {
-            Some(w) => (w.as_ptr(), w.len() as FlucomaIndex),
+            Some(weight_slice) => (weight_slice.as_ptr(), weight_slice.len() as FlucomaIndex),
             None => (std::ptr::null(), 0),
         };
         multistats_process(
@@ -176,22 +185,18 @@ impl MultiStats {
             input.as_ptr(),
             num_channels as FlucomaIndex,
             num_frames as FlucomaIndex,
-            output.as_mut_ptr(),
+            raw.as_mut_ptr(),
             values_per_channel as FlucomaIndex,
             self.config.outliers_cutoff.unwrap_or(-1.0),
             weights_ptr,
             weights_len,
         );
 
-        Ok(MultiStatsOutput {
-            values: output,
+        Ok(outputs_from_raw(
+            &raw,
             num_channels,
-            values_per_channel,
-        })
-    }
-
-    pub fn values_per_channel(&self) -> usize {
-        STATS_PER_DERIVATIVE * (self.config.num_derivatives as usize + 1)
+            self.config.num_derivatives,
+        ))
     }
 }
 
@@ -229,45 +234,37 @@ mod tests {
 
     #[test]
     fn scalar_mean_std_are_correct_slots() {
-        let mut ms = MultiStats::new(MultiStatsConfig::default()).unwrap();
+        let mut multi_stats = MultiStats::new(MultiStatsConfig::default()).unwrap();
         let input = [1.0, 2.0, 3.0, 4.0];
-        let out = ms.process(&input, 4, 1, None).unwrap();
-        let ch = out.channel(0).unwrap();
-        assert!((ch[0] - 2.5).abs() < 1e-12, "mean slot mismatch");
-        assert!(ch[1].is_finite() && ch[1] > 0.0, "std slot mismatch");
+        let channels = multi_stats.process(&input, 4, 1, None).unwrap();
+        assert_eq!(channels.len(), 1);
+        assert!((channels[0].stats.mean - 2.5).abs() < 1e-12);
+        assert!(channels[0].stats.std.is_finite() && channels[0].stats.std > 0.0);
     }
 
     #[test]
-    fn derivatives_expand_output_width() {
-        let cfg = MultiStatsConfig {
+    fn derivatives_are_exposed_as_optional_structs() {
+        let config = MultiStatsConfig {
             num_derivatives: 2,
             ..MultiStatsConfig::default()
         };
-        let mut ms = MultiStats::new(cfg).unwrap();
+        let mut multi_stats = MultiStats::new(config).unwrap();
         let input = [1.0, 2.0, 3.0, 4.0];
-        let out = ms.process(&input, 4, 1, None).unwrap();
-        assert_eq!(out.values_per_channel(), 21);
-        let ch = out.channel(0).unwrap();
-        assert!((ch[0] - 2.5).abs() < 1e-12);
-        assert!((ch[7] - 1.0).abs() < 1e-12);
-        assert!(ch[14].abs() < 1e-12);
+        let channels = multi_stats.process(&input, 4, 1, None).unwrap();
+        let output = &channels[0];
+        assert!((output.stats.mean - 2.5).abs() < 1e-12);
+        assert!((output.derivative_1.unwrap().mean - 1.0).abs() < 1e-12);
+        assert!(output.derivative_2.unwrap().mean.abs() < 1e-12);
     }
 
     #[test]
-    fn helper_methods_return_correct_values() {
-        let mut ms = MultiStats::new(MultiStatsConfig::default()).unwrap();
+    fn zero_weights_return_zeroed_outputs() {
+        let mut multi_stats = MultiStats::new(MultiStatsConfig::default()).unwrap();
         let input = [1.0, 2.0, 3.0, 4.0];
-        let out = ms.process(&input, 4, 1, None).unwrap();
-
-        assert_eq!(out.mean(0, 0), Some(2.5));
-        assert!(out.std(0, 0).unwrap() > 0.0);
-        assert!(out.skew(0, 0).is_some());
-        assert!(out.kurt(0, 0).is_some());
-        assert!(out.low(0, 0).is_some());
-        assert!(out.mid(0, 0).is_some());
-        assert!(out.high(0, 0).is_some());
-
-        assert_eq!(out.mean(1, 0), None);
-        assert_eq!(out.mean(0, 1), None);
+        let weights = [0.0, 0.0, 0.0, 0.0];
+        let channels = multi_stats.process(&input, 4, 1, Some(&weights)).unwrap();
+        assert_eq!(channels[0].stats, MultiStatsValues::zero());
+        assert!(channels[0].derivative_1.is_none());
+        assert!(channels[0].derivative_2.is_none());
     }
 }
