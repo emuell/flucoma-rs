@@ -54,7 +54,6 @@ mod hpss;
 mod loudness;
 mod matrix;
 mod mel_bands;
-mod nmf;
 mod multi_stats;
 mod nmf;
 mod nmf_filter;
