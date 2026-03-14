@@ -1,68 +1,8 @@
-use flucoma_sys::{
-    multistats_create, multistats_destroy, multistats_init, multistats_process, FlucomaIndex,
-};
+use flucoma_sys::{multistats_create, multistats_destroy, multistats_init, multistats_process, FlucomaIndex};
+
+use crate::multi_stats::{outputs_from_raw, zero_outputs, MultiStatsOutput};
 
 const STATS_PER_DERIVATIVE: usize = 7;
-
-/// Statistics emitted by BufStats/MultiStats in fixed order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum BufStat {
-    Mean,
-    Std,
-    Skew,
-    Kurtosis,
-    Low,
-    Mid,
-    High,
-}
-
-impl BufStat {
-    const fn index(self) -> usize {
-        match self {
-            Self::Mean => 0,
-            Self::Std => 1,
-            Self::Skew => 2,
-            Self::Kurtosis => 3,
-            Self::Low => 4,
-            Self::Mid => 5,
-            Self::High => 6,
-        }
-    }
-}
-
-/// Selection mask for BufStats output.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct BufStatsSelect {
-    mask: [bool; STATS_PER_DERIVATIVE],
-}
-
-impl Default for BufStatsSelect {
-    fn default() -> Self {
-        Self {
-            mask: [true; STATS_PER_DERIVATIVE],
-        }
-    }
-}
-
-impl BufStatsSelect {
-    /// Select all statistics.
-    pub fn all() -> Self {
-        Self::default()
-    }
-
-    /// Build a selection from an explicit list of statistics.
-    pub fn from_stats(stats: &[BufStat]) -> Self {
-        let mut mask = [false; STATS_PER_DERIVATIVE];
-        for stat in stats.iter().copied() {
-            mask[stat.index()] = true;
-        }
-        Self { mask }
-    }
-
-    fn selected_count(&self) -> usize {
-        self.mask.iter().filter(|&&enabled| enabled).count()
-    }
-}
 
 /// Configuration for [`BufStats`].
 #[derive(Debug, Clone)]
@@ -71,7 +11,6 @@ pub struct BufStatsConfig {
     pub num_frames: Option<usize>,
     pub start_channel: usize,
     pub num_channels: Option<usize>,
-    pub select: BufStatsSelect,
     pub num_derivatives: u8,
     pub low_percentile: f64,
     pub middle_percentile: f64,
@@ -86,7 +25,6 @@ impl Default for BufStatsConfig {
             num_frames: None,
             start_channel: 0,
             num_channels: None,
-            select: BufStatsSelect::default(),
             num_derivatives: 0,
             low_percentile: 0.0,
             middle_percentile: 50.0,
@@ -96,38 +34,10 @@ impl Default for BufStatsConfig {
     }
 }
 
-/// Channel-major (`[channel0_frames..., channel1_frames..., ...]`) BufStats output.
-#[derive(Debug, Clone)]
-pub struct BufStatsOutput {
-    values: Vec<f64>,
-    num_channels: usize,
-    values_per_channel: usize,
-}
-
-impl BufStatsOutput {
-    pub fn values(&self) -> &[f64] {
-        &self.values
-    }
-
-    pub fn num_channels(&self) -> usize {
-        self.num_channels
-    }
-
-    pub fn values_per_channel(&self) -> usize {
-        self.values_per_channel
-    }
-
-    pub fn channel(&self, channel: usize) -> Option<&[f64]> {
-        if channel >= self.num_channels {
-            return None;
-        }
-        let start = channel * self.values_per_channel;
-        let end = start + self.values_per_channel;
-        self.values.get(start..end)
-    }
-}
-
 /// BufStats-style offline statistics wrapper built on `MultiStats`.
+///
+/// Input layout is channel-major:
+/// `[channel0_frames..., channel1_frames..., ...]`.
 pub struct BufStats {
     inner: *mut u8,
     config: BufStatsConfig,
@@ -156,18 +66,16 @@ impl BufStats {
         Ok(())
     }
 
-    /// Process a channel-major source buffer.
+    /// Compute summary statistics over a selected channel-major buffer region.
     ///
-    /// `source` layout is `[channel0_frames..., channel1_frames..., ...]` where each
-    /// channel has `source_num_frames` contiguous samples.
-    /// `weights`, if provided, must match the selected frame span length.
+    /// `source` layout is `[channel0_frames..., channel1_frames..., ...]`.
     pub fn process(
         &mut self,
         source: &[f64],
         source_num_frames: usize,
         source_num_channels: usize,
         weights: Option<&[f64]>,
-    ) -> Result<BufStatsOutput, &'static str> {
+    ) -> Result<Vec<MultiStatsOutput>, &'static str> {
         if source_num_frames == 0 {
             return Err("source_num_frames must be > 0");
         }
@@ -211,39 +119,26 @@ impl BufStats {
             return Err("start_channel + num_channels out of range");
         }
 
-        let selected_per_derivative = self.config.select.selected_count();
-        if selected_per_derivative == 0 {
-            return Err("select must enable at least one statistic");
-        }
-        let values_per_channel =
-            selected_per_derivative * (self.config.num_derivatives as usize + 1);
-
         let mut selected_source = vec![0.0; selected_num_channels * selected_num_frames];
-        for ch in 0..selected_num_channels {
-            let src_ch = start_channel + ch;
-            let src_start = src_ch * source_num_frames + start_frame;
+        for channel in 0..selected_num_channels {
+            let source_channel = start_channel + channel;
+            let src_start = source_channel * source_num_frames + start_frame;
             let src_end = src_start + selected_num_frames;
-            let dst_start = ch * selected_num_frames;
+            let dst_start = channel * selected_num_frames;
             let dst_end = dst_start + selected_num_frames;
             selected_source[dst_start..dst_end].copy_from_slice(&source[src_start..src_end]);
         }
 
-        let weights_are_all_non_positive = weights
-            .map(|w| {
-                if w.len() != selected_num_frames {
-                    return Err("weights length must match selected frame span");
-                }
-                Ok(!w.iter().copied().any(|v| v > 0.0))
-            })
-            .transpose()?
-            .unwrap_or(false);
-
-        if weights_are_all_non_positive {
-            return Ok(BufStatsOutput {
-                values: vec![0.0; selected_num_channels * values_per_channel],
-                num_channels: selected_num_channels,
-                values_per_channel,
-            });
+        if let Some(weight_slice) = weights {
+            if weight_slice.len() != selected_num_frames {
+                return Err("weights length must match selected frame span");
+            }
+            if !weight_slice.iter().copied().any(|value| value > 0.0) {
+                return Ok(zero_outputs(
+                    selected_num_channels,
+                    self.config.num_derivatives,
+                ));
+            }
         }
 
         multistats_init(
@@ -254,46 +149,29 @@ impl BufStats {
             self.config.high_percentile,
         );
 
-        let full_values_per_channel =
-            STATS_PER_DERIVATIVE * (self.config.num_derivatives as usize + 1);
-        let mut full_output = vec![0.0; selected_num_channels * full_values_per_channel];
-
+        let values_per_channel = STATS_PER_DERIVATIVE * (self.config.num_derivatives as usize + 1);
+        let mut raw = vec![0.0; selected_num_channels * values_per_channel];
         let (weights_ptr, weights_len) = match weights {
-            Some(w) => (w.as_ptr(), w.len() as FlucomaIndex),
+            Some(weight_slice) => (weight_slice.as_ptr(), weight_slice.len() as FlucomaIndex),
             None => (std::ptr::null(), 0),
         };
-        let outliers_cutoff = self.config.outliers_cutoff.unwrap_or(-1.0);
         multistats_process(
             self.inner,
             selected_source.as_ptr(),
             selected_num_channels as FlucomaIndex,
             selected_num_frames as FlucomaIndex,
-            full_output.as_mut_ptr(),
-            full_values_per_channel as FlucomaIndex,
-            outliers_cutoff,
+            raw.as_mut_ptr(),
+            values_per_channel as FlucomaIndex,
+            self.config.outliers_cutoff.unwrap_or(-1.0),
             weights_ptr,
             weights_len,
         );
 
-        let mut selected_output = vec![0.0; selected_num_channels * values_per_channel];
-        for ch in 0..selected_num_channels {
-            let full_start = ch * full_values_per_channel;
-            let full_end = full_start + full_values_per_channel;
-            let full_channel = &full_output[full_start..full_end];
-            let mut write_idx = ch * values_per_channel;
-            for (idx, value) in full_channel.iter().copied().enumerate() {
-                if self.config.select.mask[idx % STATS_PER_DERIVATIVE] {
-                    selected_output[write_idx] = value;
-                    write_idx += 1;
-                }
-            }
-        }
-
-        Ok(BufStatsOutput {
-            values: selected_output,
-            num_channels: selected_num_channels,
-            values_per_channel,
-        })
+        Ok(outputs_from_raw(
+            &raw,
+            selected_num_channels,
+            self.config.num_derivatives,
+        ))
     }
 }
 
@@ -330,65 +208,50 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mean_only_matches_expected() {
-        let config = BufStatsConfig {
-            select: BufStatsSelect::from_stats(&[BufStat::Mean]),
-            ..BufStatsConfig::default()
-        };
-        let mut stats = BufStats::new(config).unwrap();
+    fn mean_matches_expected() {
+        let mut stats = BufStats::new(BufStatsConfig::default()).unwrap();
         let source = vec![1.0, 2.0, 3.0, 4.0];
-        let output = stats.process(&source, 4, 1, None).unwrap();
-        assert_eq!(output.values(), &[2.5]);
+        let channels = stats.process(&source, 4, 1, None).unwrap();
+        assert_eq!(channels.len(), 1);
+        assert!((channels[0].stats.mean - 2.5).abs() < 1e-12);
     }
 
     #[test]
-    fn derivative_means_follow_expected_order() {
+    fn derivatives_are_exposed_in_output_structs() {
         let config = BufStatsConfig {
-            select: BufStatsSelect::from_stats(&[BufStat::Mean]),
             num_derivatives: 2,
             ..BufStatsConfig::default()
         };
         let mut stats = BufStats::new(config).unwrap();
         let source = vec![1.0, 2.0, 3.0, 4.0];
-        let output = stats.process(&source, 4, 1, None).unwrap();
-        let values = output.values();
-        assert!(
-            (values[0] - 2.5).abs() < 1e-12,
-            "unexpected d0 mean: {}",
-            values[0]
-        );
-        assert!(
-            (values[1] - 1.0).abs() < 1e-12,
-            "unexpected d1 mean: {}",
-            values[1]
-        );
-        assert!(values[2].abs() < 1e-12, "unexpected d2 mean: {}", values[2]);
+        let channels = stats.process(&source, 4, 1, None).unwrap();
+        let output = &channels[0];
+        assert!((output.stats.mean - 2.5).abs() < 1e-12);
+        assert!((output.derivative_1.unwrap().mean - 1.0).abs() < 1e-12);
+        assert!(output.derivative_2.unwrap().mean.abs() < 1e-12);
     }
 
     #[test]
     fn weights_influence_mean() {
-        let config = BufStatsConfig {
-            select: BufStatsSelect::from_stats(&[BufStat::Mean]),
-            ..BufStatsConfig::default()
-        };
-        let mut stats = BufStats::new(config).unwrap();
+        let mut stats = BufStats::new(BufStatsConfig::default()).unwrap();
         let source = vec![0.0, 10.0];
         let weights = vec![0.9, 0.1];
-        let output = stats.process(&source, 2, 1, Some(&weights)).unwrap();
-        assert!((output.values()[0] - 1.0).abs() < 1e-9);
+        let channels = stats.process(&source, 2, 1, Some(&weights)).unwrap();
+        assert!((channels[0].stats.mean - 1.0).abs() < 1e-9);
     }
 
     #[test]
-    fn non_positive_weights_return_zeros() {
+    fn non_positive_weights_return_zeroed_outputs() {
         let config = BufStatsConfig {
-            select: BufStatsSelect::from_stats(&[BufStat::Mean, BufStat::Std]),
             num_derivatives: 1,
             ..BufStatsConfig::default()
         };
         let mut stats = BufStats::new(config).unwrap();
         let source = vec![1.0, 2.0, 3.0, 4.0];
         let weights = vec![0.0, -1.0, 0.0, -2.0];
-        let output = stats.process(&source, 4, 1, Some(&weights)).unwrap();
-        assert_eq!(output.values(), &[0.0, 0.0, 0.0, 0.0]);
+        let channels = stats.process(&source, 4, 1, Some(&weights)).unwrap();
+        assert_eq!(channels[0].stats.mean, 0.0);
+        assert_eq!(channels[0].stats.std, 0.0);
+        assert_eq!(channels[0].derivative_1.unwrap().mean, 0.0);
     }
 }

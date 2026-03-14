@@ -68,9 +68,11 @@ mod transient_seg;
 
 /// Raw data processing and helper types.
 pub mod data {
-    pub use super::bufstats::{BufStat, BufStats, BufStatsConfig, BufStatsOutput, BufStatsSelect};
+    pub use super::bufstats::{BufStats, BufStatsConfig};
     pub use super::matrix::Matrix;
-    pub use super::multi_stats::{MultiStats, MultiStatsConfig, MultiStatsOutput};
+    pub use super::multi_stats::{
+        MultiStats, MultiStatsConfig, MultiStatsOutput, MultiStatsValues,
+    };
     pub use super::normalize::Normalize;
     pub use super::running_stats::RunningStats;
 }
