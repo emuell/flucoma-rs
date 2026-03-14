@@ -3,10 +3,14 @@ use flucoma_sys::{
     robust_scaling_process, FlucomaIndex,
 };
 
+use crate::matrix::Matrix;
+
 /// Percentile-based robust scaler for dataset-style matrices.
 ///
 /// Uses `(x - median) / (high_percentile - low_percentile)` per feature,
 /// which is less sensitive to outliers than min-max or z-score scaling.
+///
+/// See <https://learn.flucoma.org/reference/robustscale>
 ///
 /// Input/output layout is row-major over points:
 /// `[row0_cols..., row1_cols..., ...]`.
@@ -21,6 +25,10 @@ pub struct RobustScale {
 unsafe impl Send for RobustScale {}
 
 impl RobustScale {
+    /// Create a robust scaler using the given percentile range per feature.
+    ///
+    /// # Errors
+    /// Returns an error if the percentile range is invalid.
     pub fn new(low_percentile: f64, high_percentile: f64) -> Result<Self, &'static str> {
         if !(0.0..=100.0).contains(&low_percentile) {
             return Err("low_percentile must be in [0, 100]");
@@ -43,89 +51,54 @@ impl RobustScale {
         })
     }
 
-    pub fn fit(&mut self, data: &[f64], rows: usize, cols: usize) -> Result<(), &'static str> {
-        if rows == 0 {
-            return Err("rows must be > 0");
-        }
-        if cols == 0 {
-            return Err("cols must be > 0");
-        }
-        if data.len() != rows * cols {
-            return Err("data length does not match rows * cols");
-        }
+    /// Fit the scaler from a row-major matrix.
+    pub fn fit(&mut self, data: &Matrix) -> Result<(), &'static str> {
         robust_scaling_fit(
             self.inner,
             self.low_percentile,
             self.high_percentile,
-            data.as_ptr(),
-            rows as FlucomaIndex,
-            cols as FlucomaIndex,
+            data.data().as_ptr(),
+            data.rows() as FlucomaIndex,
+            data.cols() as FlucomaIndex,
         );
-        self.cols = Some(cols);
+        self.cols = Some(data.cols());
         Ok(())
     }
 
-    pub fn transform(
-        &self,
-        data: &[f64],
-        rows: usize,
-        cols: usize,
-    ) -> Result<Vec<f64>, &'static str> {
-        self.process_internal(data, rows, cols, false)
+    /// Transform a matrix using the fitted percentile statistics.
+    pub fn transform(&self, data: &Matrix) -> Result<Matrix, &'static str> {
+        self.process_internal(data, false)
     }
 
-    pub fn inverse_transform(
-        &self,
-        data: &[f64],
-        rows: usize,
-        cols: usize,
-    ) -> Result<Vec<f64>, &'static str> {
-        self.process_internal(data, rows, cols, true)
+    /// Undo a previous robust scaling step.
+    pub fn inverse_transform(&self, data: &Matrix) -> Result<Matrix, &'static str> {
+        self.process_internal(data, true)
     }
 
-    pub fn fit_transform(
-        &mut self,
-        data: &[f64],
-        rows: usize,
-        cols: usize,
-    ) -> Result<Vec<f64>, &'static str> {
-        self.fit(data, rows, cols)?;
-        self.transform(data, rows, cols)
+    /// Fit the scaler and transform the same matrix in one step.
+    pub fn fit_transform(&mut self, data: &Matrix) -> Result<Matrix, &'static str> {
+        self.fit(data)?;
+        self.transform(data)
     }
 
     pub fn is_fitted(&self) -> bool {
         robust_scaling_initialized(self.inner)
     }
 
-    fn process_internal(
-        &self,
-        data: &[f64],
-        rows: usize,
-        cols: usize,
-        inverse: bool,
-    ) -> Result<Vec<f64>, &'static str> {
+    fn process_internal(&self, data: &Matrix, inverse: bool) -> Result<Matrix, &'static str> {
         if !self.is_fitted() {
             return Err("robust scaler is not fitted");
         }
-        if rows == 0 {
-            return Err("rows must be > 0");
-        }
-        if cols == 0 {
-            return Err("cols must be > 0");
-        }
-        if self.cols != Some(cols) {
+        if self.cols != Some(data.cols()) {
             return Err("cols must match fitted feature dimension");
         }
-        if data.len() != rows * cols {
-            return Err("data length does not match rows * cols");
-        }
-        let mut out = vec![0.0; data.len()];
+        let mut out = Matrix::new(data.rows(), data.cols());
         robust_scaling_process(
             self.inner,
-            data.as_ptr(),
-            rows as FlucomaIndex,
-            cols as FlucomaIndex,
-            out.as_mut_ptr(),
+            data.data().as_ptr(),
+            data.rows() as FlucomaIndex,
+            data.cols() as FlucomaIndex,
+            out.data_mut().as_mut_ptr(),
             inverse,
         );
         Ok(out)
@@ -144,11 +117,12 @@ mod tests {
 
     #[test]
     fn robust_scale_then_inverse_returns_input() {
-        let data = vec![1.0, 10.0, 3.0, 20.0, 5.0, 30.0, 1000.0, -999.0];
+        let data = Matrix::from_vec(vec![1.0, 10.0, 3.0, 20.0, 5.0, 30.0, 1000.0, -999.0], 4, 2)
+            .unwrap();
         let mut r = RobustScale::new(25.0, 75.0).unwrap();
-        let scaled = r.fit_transform(&data, 4, 2).unwrap();
-        let inv = r.inverse_transform(&scaled, 4, 2).unwrap();
-        for (a, b) in data.iter().zip(inv.iter()) {
+        let scaled = r.fit_transform(&data).unwrap();
+        let inv = r.inverse_transform(&scaled).unwrap();
+        for (a, b) in data.data().iter().zip(inv.data().iter()) {
             assert!((a - b).abs() < 1e-8, "expected {a}, got {b}");
         }
     }
@@ -156,7 +130,8 @@ mod tests {
     #[test]
     fn transform_before_fit_fails() {
         let r = RobustScale::new(25.0, 75.0).unwrap();
-        let err = r.transform(&[1.0, 2.0], 1, 2).unwrap_err();
+        let data = Matrix::from_vec(vec![1.0, 2.0], 1, 2).unwrap();
+        let err = r.transform(&data).unwrap_err();
         assert_eq!(err, "robust scaler is not fitted");
     }
 }
