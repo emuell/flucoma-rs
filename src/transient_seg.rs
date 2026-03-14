@@ -8,24 +8,24 @@ use flucoma_sys::{
 /// Transient detector and segmenter operating on audio blocks.
 ///
 /// Three-phase setup:
-/// 1. [`TransientSegmentation::new`] -- allocates buffers and initialises the AR model.
-/// 2. (Optional) [`TransientSegmentation::set_detection_parameters`] -- tune sensitivity.
-/// 3. Call [`TransientSegmentation::process`] per audio block.
+/// 1. [`TransientSlice::new`] -- allocates buffers and initialises the AR model.
+/// 2. (Optional) [`TransientSlice::set_detection_parameters`] -- tune sensitivity.
+/// 3. Call [`TransientSlice::process`] per audio block.
 ///
 /// Each call to `process` consumes an input block of `input_size()` samples
 /// and returns a `Vec<f64>` of `hop_size()` samples where each value is
 /// 1.0 (transient onset) or 0.0.
 ///
 /// See <https://learn.flucoma.org/reference/transientslice>
-pub struct TransientSegmentation {
+pub struct TransientSlice {
     inner: *mut u8,
     hop_size: usize,
     input_size: usize,
 }
 
-unsafe impl Send for TransientSegmentation {}
+unsafe impl Send for TransientSlice {}
 
-impl TransientSegmentation {
+impl TransientSlice {
     /// Create and initialise a transient segmenter.
     ///
     /// # Arguments
@@ -50,7 +50,7 @@ impl TransientSegmentation {
         }
         let inner = transient_seg_create(order as isize, block_size as isize, pad_size as isize);
         if inner.is_null() {
-            return Err("failed to create TransientSegmentation instance");
+            return Err("failed to create TransientSlice instance");
         }
         transient_seg_init(
             inner,
@@ -136,7 +136,7 @@ impl TransientSegmentation {
     }
 }
 
-impl Drop for TransientSegmentation {
+impl Drop for TransientSlice {
     fn drop(&mut self) {
         transient_seg_destroy(self.inner);
     }
@@ -150,10 +150,10 @@ mod tests {
 
     #[test]
     fn transient_seg_silence_returns_zeros() {
-        let mut seg = TransientSegmentation::new(20, 256, 128).unwrap();
-        let input = vec![0.0f64; seg.input_size()];
-        let out = seg.process(&input);
-        assert_eq!(out.len(), seg.hop_size());
+        let mut slice = TransientSlice::new(20, 256, 128).unwrap();
+        let input = vec![0.0f64; slice.input_size()];
+        let out = slice.process(&input);
+        assert_eq!(out.len(), slice.hop_size());
         for (i, &v) in out.iter().enumerate() {
             assert!(
                 v == 0.0 || v == 1.0,
@@ -164,16 +164,16 @@ mod tests {
 
     #[test]
     fn transient_seg_impulse_can_detect() {
-        let mut seg = TransientSegmentation::new(20, 256, 128).unwrap();
-        seg.set_detection_parameters(1.0, 1.0, 0.5, 7, 25, 50);
+        let mut slice = TransientSlice::new(20, 256, 128).unwrap();
+        slice.set_detection_parameters(1.0, 1.0, 0.5, 7, 25, 50);
         // Seed with silence
-        let silence = vec![0.0f64; seg.input_size()];
-        let _ = seg.process(&silence);
+        let silence = vec![0.0f64; slice.input_size()];
+        let _ = slice.process(&silence);
         // Feed a block with a large impulse
-        let mut impulse = vec![0.0f64; seg.input_size()];
+        let mut impulse = vec![0.0f64; slice.input_size()];
         impulse[0] = 1.0;
-        let out = seg.process(&impulse);
-        assert_eq!(out.len(), seg.hop_size());
+        let out = slice.process(&impulse);
+        assert_eq!(out.len(), slice.hop_size());
         // At minimum the output must be valid 0/1 values
         for (i, &v) in out.iter().enumerate() {
             assert!(

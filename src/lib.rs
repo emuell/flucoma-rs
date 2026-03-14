@@ -50,10 +50,12 @@ mod amp_feature;
 mod amp_seg;
 mod audio_transport;
 mod bufstats;
+mod hpss;
 mod loudness;
 mod matrix;
 mod mel_bands;
 mod multi_stats;
+mod nmf;
 mod nmf_filter;
 mod nmf_morph;
 mod normalize;
@@ -63,7 +65,9 @@ mod onset;
 mod onset_seg;
 mod running_stats;
 mod sine;
+mod sine_extraction;
 mod stft;
+mod transient_extraction;
 mod transient_seg;
 
 /// Raw data processing and helper types.
@@ -100,10 +104,19 @@ pub mod transformation {
     pub use super::nmf_morph::NMFMorph;
 }
 
+/// Audio source separation and decomposition.
+pub mod decomposition {
+    pub use super::hpss::{Hpss, HpssMode, HpssParams};
+    pub use super::nmf::Nmf;
+    pub use super::nmf_filter::NmfResult;
+    pub use super::sine_extraction::{SineExtraction, SineExtractionParams};
+    pub use super::transient_extraction::TransientExtraction;
+}
+
 /// Onset segmentation.
 pub mod segmentation {
-    pub use super::amp_seg::AmpSegmentation;
-    pub use super::novelty_seg::NoveltySegmentation;
-    pub use super::onset_seg::OnsetSegmentation;
-    pub use super::transient_seg::TransientSegmentation;
+    pub use super::amp_seg::AmpSlice;
+    pub use super::novelty_seg::NoveltySlice;
+    pub use super::onset_seg::OnsetSlice;
+    pub use super::transient_seg::TransientSlice;
 }

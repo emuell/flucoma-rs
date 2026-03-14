@@ -33,6 +33,9 @@ cpp! {{
     #include <flucoma/algorithms/public/NoveltySegmentation.hpp>
     #include <flucoma/algorithms/public/SineFeature.hpp>
     #include <flucoma/algorithms/public/TransientSegmentation.hpp>
+    #include <flucoma/algorithms/public/HPSS.hpp>
+    #include <flucoma/algorithms/public/SineExtraction.hpp>
+    #include <flucoma/algorithms/public/TransientExtraction.hpp>
     using namespace fluid;
     using namespace fluid::algorithm;
 }}
@@ -225,11 +228,12 @@ pub fn istft_process_frame(
             in_complex as "const double*", num_bins as "ptrdiff_t",
             output as "double*", output_len as "ptrdiff_t"
         ] {
+            using namespace Eigen;
             auto* cptr = reinterpret_cast<std::complex<double>*>(
                 const_cast<double*>(in_complex));
-            FluidTensorView<std::complex<double>, 1> in_v(cptr, 0, num_bins);
-            FluidTensorView<double, 1> out_v(output, 0, output_len);
-            ptr->processFrame(in_v, out_v);
+            Map<ArrayXcd> in_m(cptr, num_bins);
+            Map<ArrayXd> out_m(output, output_len);
+            ptr->processFrame(in_m, out_m);
         })
     }
 }
@@ -570,7 +574,7 @@ pub fn onset_process_frame(
 }
 
 // -------------------------------------------------------------------------------------------------
-// OnsetSegmentation
+// OnsetSlice
 
 pub fn onset_seg_create(max_size: FlucomaIndex, max_filter_size: FlucomaIndex) -> *mut u8 {
     unsafe {
@@ -629,7 +633,7 @@ pub fn onset_seg_process_frame(
 }
 
 // -------------------------------------------------------------------------------------------------
-// AmpSegmentation
+// AmpSlice
 
 pub fn amp_seg_create() -> *mut u8 {
     unsafe {
@@ -689,7 +693,7 @@ pub fn amp_seg_process_sample(
 }
 
 // -------------------------------------------------------------------------------------------------
-// NoveltySegmentation
+// NoveltySlice
 
 pub fn novelty_seg_create(
     max_kernel_size: FlucomaIndex,
@@ -866,7 +870,7 @@ pub fn sine_process_frame(
 }
 
 // -------------------------------------------------------------------------------------------------
-// TransientSegmentation
+// TransientSlice
 
 pub fn transient_seg_create(
     max_order: FlucomaIndex,
@@ -958,6 +962,256 @@ pub fn transient_seg_hop_size(ptr: *mut u8) -> FlucomaIndex {
 pub fn transient_seg_input_size(ptr: *mut u8) -> FlucomaIndex {
     unsafe {
         cpp!([ptr as "TransientSegmentation*"] -> FlucomaIndex as "ptrdiff_t" {
+            return ptr->inputSize();
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// HPSS
+
+pub fn hpss_create(max_fft_size: FlucomaIndex, max_h_size: FlucomaIndex) -> *mut u8 {
+    unsafe {
+        cpp!([max_fft_size as "ptrdiff_t", max_h_size as "ptrdiff_t"] -> *mut u8 as "void*" {
+            return static_cast<void*>(new HPSS(max_fft_size, max_h_size, FluidDefaultAllocator()));
+        })
+    }
+}
+
+pub fn hpss_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "HPSS*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn hpss_init(ptr: *mut u8, n_bins: FlucomaIndex, h_size: FlucomaIndex) {
+    unsafe {
+        cpp!([ptr as "HPSS*", n_bins as "ptrdiff_t", h_size as "ptrdiff_t"] {
+            ptr->init(n_bins, h_size);
+        })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn hpss_process_frame(
+    ptr: *mut u8,
+    in_complex: *const f64,
+    n_bins: FlucomaIndex,
+    out_complex: *mut f64,
+    v_size: FlucomaIndex,
+    h_size: FlucomaIndex,
+    mode: FlucomaIndex,
+    h_thresh_x1: f64,
+    h_thresh_y1: f64,
+    h_thresh_x2: f64,
+    h_thresh_y2: f64,
+    p_thresh_x1: f64,
+    p_thresh_y1: f64,
+    p_thresh_x2: f64,
+    p_thresh_y2: f64,
+) {
+    unsafe {
+        cpp!([
+            ptr as "HPSS*",
+            in_complex as "const double*", n_bins as "ptrdiff_t",
+            out_complex as "double*",
+            v_size as "ptrdiff_t", h_size as "ptrdiff_t", mode as "ptrdiff_t",
+            h_thresh_x1 as "double", h_thresh_y1 as "double",
+            h_thresh_x2 as "double", h_thresh_y2 as "double",
+            p_thresh_x1 as "double", p_thresh_y1 as "double",
+            p_thresh_x2 as "double", p_thresh_y2 as "double"
+        ] {
+            auto* in_cptr = reinterpret_cast<std::complex<double>*>(
+                const_cast<double*>(in_complex));
+            FluidTensorView<std::complex<double>, 1> in_v(in_cptr, 0, n_bins);
+            auto* out_cptr = reinterpret_cast<std::complex<double>*>(out_complex);
+            FluidTensorView<std::complex<double>, 2> out_v(out_cptr, 0, n_bins, 3);
+            ptr->processFrame(in_v, out_v, v_size, h_size,
+                              static_cast<HPSS::HPSSMode>(mode),
+                              h_thresh_x1, h_thresh_y1, h_thresh_x2, h_thresh_y2,
+                              p_thresh_x1, p_thresh_y1, p_thresh_x2, p_thresh_y2);
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// SineExtraction
+
+pub fn sine_ext_create(max_fft_size: FlucomaIndex) -> *mut u8 {
+    unsafe {
+        cpp!([max_fft_size as "ptrdiff_t"] -> *mut u8 as "void*" {
+            return static_cast<void*>(new SineExtraction(max_fft_size, FluidDefaultAllocator()));
+        })
+    }
+}
+
+pub fn sine_ext_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "SineExtraction*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn sine_ext_init(
+    ptr: *mut u8,
+    window_size: FlucomaIndex,
+    fft_size: FlucomaIndex,
+    transform_size: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "SineExtraction*",
+            window_size as "ptrdiff_t", fft_size as "ptrdiff_t",
+            transform_size as "ptrdiff_t"
+        ] {
+            ptr->init(window_size, fft_size, transform_size, FluidDefaultAllocator());
+        })
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn sine_ext_process_frame(
+    ptr: *mut u8,
+    in_complex: *const f64,
+    n_bins: FlucomaIndex,
+    out_complex: *mut f64,
+    sample_rate: f64,
+    detection_threshold: f64,
+    min_track_length: FlucomaIndex,
+    birth_low_threshold: f64,
+    birth_high_threshold: f64,
+    track_method: FlucomaIndex,
+    zeta_a: f64,
+    zeta_f: f64,
+    delta: f64,
+    bandwidth: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "SineExtraction*",
+            in_complex as "const double*", n_bins as "ptrdiff_t",
+            out_complex as "double*",
+            sample_rate as "double", detection_threshold as "double",
+            min_track_length as "ptrdiff_t",
+            birth_low_threshold as "double", birth_high_threshold as "double",
+            track_method as "ptrdiff_t",
+            zeta_a as "double", zeta_f as "double", delta as "double",
+            bandwidth as "ptrdiff_t"
+        ] {
+            auto* in_cptr = reinterpret_cast<std::complex<double>*>(
+                const_cast<double*>(in_complex));
+            FluidTensorView<std::complex<double>, 1> in_v(in_cptr, 0, n_bins);
+            auto* out_cptr = reinterpret_cast<std::complex<double>*>(out_complex);
+            FluidTensorView<std::complex<double>, 2> out_v(out_cptr, 0, n_bins, 2);
+            ptr->processFrame(in_v, out_v, sample_rate, detection_threshold,
+                              min_track_length, birth_low_threshold, birth_high_threshold,
+                              track_method, zeta_a, zeta_f, delta, bandwidth,
+                              FluidDefaultAllocator());
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// TransientExtraction
+
+pub fn transient_ext_create(
+    max_order: FlucomaIndex,
+    max_block_size: FlucomaIndex,
+    max_pad_size: FlucomaIndex,
+) -> *mut u8 {
+    unsafe {
+        cpp!([
+            max_order as "ptrdiff_t",
+            max_block_size as "ptrdiff_t",
+            max_pad_size as "ptrdiff_t"
+        ] -> *mut u8 as "void*" {
+            return static_cast<void*>(
+                new TransientExtraction(max_order, max_block_size, max_pad_size,
+                                        FluidDefaultAllocator()));
+        })
+    }
+}
+
+pub fn transient_ext_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "TransientExtraction*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn transient_ext_init(
+    ptr: *mut u8,
+    order: FlucomaIndex,
+    block_size: FlucomaIndex,
+    pad_size: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "TransientExtraction*",
+            order as "ptrdiff_t", block_size as "ptrdiff_t", pad_size as "ptrdiff_t"
+        ] {
+            ptr->init(order, block_size, pad_size);
+        })
+    }
+}
+
+pub fn transient_ext_set_detection_params(
+    ptr: *mut u8,
+    power: f64,
+    thresh_hi: f64,
+    thresh_lo: f64,
+    half_window: FlucomaIndex,
+    hold: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "TransientExtraction*",
+            power as "double", thresh_hi as "double", thresh_lo as "double",
+            half_window as "ptrdiff_t", hold as "ptrdiff_t"
+        ] {
+            ptr->setDetectionParameters(power, thresh_hi, thresh_lo, half_window, hold);
+        })
+    }
+}
+
+pub fn transient_ext_process(
+    ptr: *mut u8,
+    input: *const f64,
+    input_len: FlucomaIndex,
+    transients_out: *mut f64,
+    residual_out: *mut f64,
+    output_len: FlucomaIndex,
+) {
+    unsafe {
+        cpp!([
+            ptr as "TransientExtraction*",
+            input as "const double*", input_len as "ptrdiff_t",
+            transients_out as "double*", residual_out as "double*",
+            output_len as "ptrdiff_t"
+        ] {
+            FluidTensorView<double, 1> in_v(const_cast<double*>(input), 0, input_len);
+            FluidTensorView<double, 1> trans_v(transients_out, 0, output_len);
+            FluidTensorView<double, 1> resid_v(residual_out, 0, output_len);
+            ptr->process(in_v, trans_v, resid_v, FluidDefaultAllocator());
+        })
+    }
+}
+
+pub fn transient_ext_hop_size(ptr: *mut u8) -> FlucomaIndex {
+    unsafe {
+        cpp!([ptr as "TransientExtraction*"] -> FlucomaIndex as "ptrdiff_t" {
+            return ptr->hopSize();
+        })
+    }
+}
+
+pub fn transient_ext_input_size(ptr: *mut u8) -> FlucomaIndex {
+    unsafe {
+        cpp!([ptr as "TransientExtraction*"] -> FlucomaIndex as "ptrdiff_t" {
             return ptr->inputSize();
         })
     }

@@ -7,23 +7,24 @@ pub use crate::onset::OnsetFunction;
 /// Detects onsets in an audio stream and returns a binary decision per frame.
 ///
 /// Two-phase setup:
-/// 1. [`OnsetSegmentation::new`] -- allocates buffers and initialises the detector.
-/// 2. Call [`OnsetSegmentation::process_frame`] per frame.
+/// 1. [`OnsetSlice::new`] -- allocates buffers and initialises the detector.
+/// 2. Call [`OnsetSlice::process_frame`] per frame.
 ///
 /// Unlike [`crate::analyzation::Onset`], which returns a continuous
 /// detection value, this algorithm applies a threshold and debounce internally
 /// and returns 1.0 (onset detected) or 0.0 (no onset).
 ///
 /// See <https://learn.flucoma.org/reference/onsetslice>
-pub struct OnsetSegmentation {
+pub struct OnsetSlice {
     inner: *mut u8,
     window_size: usize,
     fft_size: usize,
+    max_filter_size: usize,
 }
 
-unsafe impl Send for OnsetSegmentation {}
+unsafe impl Send for OnsetSlice {}
 
-impl OnsetSegmentation {
+impl OnsetSlice {
     /// Create and initialise an onset segmenter.
     ///
     /// # Arguments
@@ -48,7 +49,7 @@ impl OnsetSegmentation {
         let max_filter = filter_size.max(3);
         let inner = onset_seg_create(fft_size as isize, max_filter as isize);
         if inner.is_null() {
-            return Err("failed to create OnsetSegmentation instance");
+            return Err("failed to create OnsetSlice instance");
         }
         onset_seg_init(
             inner,
@@ -60,6 +61,7 @@ impl OnsetSegmentation {
             inner,
             window_size,
             fft_size,
+            max_filter_size: max_filter,
         })
     }
 
@@ -94,6 +96,12 @@ impl OnsetSegmentation {
             input.len(),
             min_len
         );
+        assert!(
+            filter_size <= self.max_filter_size,
+            "filter_size ({}) must be <= max_filter_size ({})",
+            filter_size,
+            self.max_filter_size
+        );
         onset_seg_process_frame(
             self.inner,
             input.as_ptr(),
@@ -117,7 +125,7 @@ impl OnsetSegmentation {
     }
 }
 
-impl Drop for OnsetSegmentation {
+impl Drop for OnsetSlice {
     fn drop(&mut self) {
         onset_seg_destroy(self.inner);
     }
@@ -131,22 +139,22 @@ mod tests {
 
     #[test]
     fn onset_seg_silent_frame_returns_zero() {
-        let mut seg = OnsetSegmentation::new(1024, 1024, 5).unwrap();
+        let mut slice = OnsetSlice::new(1024, 1024, 5).unwrap();
         let silence = vec![0.0f64; 1024];
-        let val = seg.process_frame(&silence, OnsetFunction::PowerSpectrum, 5, 0.5, 0, 0);
+        let val = slice.process_frame(&silence, OnsetFunction::PowerSpectrum, 5, 0.5, 0, 0);
         assert_eq!(val, 0.0, "silence should not trigger an onset, got {val}");
     }
 
     #[test]
     fn onset_seg_impulse_after_silence_triggers() {
-        let mut seg = OnsetSegmentation::new(1024, 1024, 0).unwrap();
+        let mut slice = OnsetSlice::new(1024, 1024, 0).unwrap();
         let silence = vec![0.0f64; 1024];
         // Seed the history with silence
-        let _ = seg.process_frame(&silence, OnsetFunction::PowerSpectrum, 0, 0.01, 0, 0);
+        let _ = slice.process_frame(&silence, OnsetFunction::PowerSpectrum, 0, 0.01, 0, 0);
         // Feed a loud impulse (away from sample 0 which has zero Hann weight)
         let mut impulse = vec![0.0f64; 1024];
         impulse[512] = 1.0;
-        let val = seg.process_frame(&impulse, OnsetFunction::PowerSpectrum, 0, 0.01, 0, 0);
+        let val = slice.process_frame(&impulse, OnsetFunction::PowerSpectrum, 0, 0.01, 0, 0);
         assert!(val == 1.0 || val == 0.0, "expected 0.0 or 1.0, got {val}");
     }
 }
