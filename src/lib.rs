@@ -64,12 +64,16 @@ mod multi_stats;
 mod nmf;
 mod nmf_filter;
 mod nmf_morph;
+mod normalize;
 mod novelty_feature;
 mod novelty_seg;
 mod onset;
 mod onset_seg;
 mod running_stats;
+mod pca;
+mod robust_scale;
 mod sine;
+mod standardize;
 mod sine_extraction;
 mod stft;
 mod transient_extraction;
@@ -83,6 +87,10 @@ pub mod data {
         MultiStats, MultiStatsConfig, MultiStatsOutput, MultiStatsValues,
     };
     pub use super::running_stats::RunningStats;
+    pub use super::normalize::Normalize;
+    pub use super::pca::{Pca, PcaConfig, PcaScaler};
+    pub use super::robust_scale::RobustScale;
+    pub use super::standardize::Standardize;
 }
 
 /// STFT / ISTFT — convert audio frames to/from complex spectra.
