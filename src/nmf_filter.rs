@@ -44,6 +44,10 @@ impl NMFFilter {
     /// # Arguments
     /// * `n_bins` - Number of FFT bins (magnitude spectrum length). Must be > 0.
     /// * `rank`   - Number of NMF components / dictionary columns. Must be > 0.
+    ///
+    /// # Errors
+    /// Returns an error if `n_bins == 0`, `rank == 0`, or the underlying FluCoMa
+    /// instance cannot be allocated.
     pub fn new(n_bins: usize, rank: usize) -> Result<Self, &'static str> {
         if n_bins == 0 {
             return Err("n_bins must be > 0");
@@ -158,11 +162,9 @@ impl NMFFilter {
             self.n_bins
         );
         assert_eq!(
-            rank,
-            self.rank,
+            rank, self.rank,
             "rank ({}) must equal construction rank ({})",
-            rank,
-            self.rank
+            rank, self.rank
         );
         let n_frames = spectrogram.rows();
         let n_bins = spectrogram.cols();

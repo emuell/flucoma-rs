@@ -1,5 +1,11 @@
-//! Safe Rust bindings for [flucoma-core](https://github.com/flucoma/flucoma-core)
-//! audio analysis algorithms.
+//! Safe Rust bindings for [FluCoMa](https://www.flucoma.org/) (Fluid Corpus Manipulation),
+//! a set of C++ audio analysis and transformation algorithms developed for creative
+//! music applications.
+//!
+//! The underlying C++ library ([flucoma-core](https://github.com/flucoma/flucoma-core))
+//! covers spectral analysis, source separation, feature extraction, and event segmentation.
+//! This crate exposes those algorithms through idiomatic Rust wrappers with owned types,
+//! `Result`-based error handling, and no unsafe code in user-facing APIs.
 //!
 //! ## Examples
 //!
@@ -69,7 +75,7 @@ mod stft;
 mod transient_extraction;
 mod transient_seg;
 
-/// Raw data processing and helper types.
+/// Low-level data processing, machine learning, and other shared data types.
 pub mod data {
     pub use super::bufstats::{BufStats, BufStatsConfig};
     pub use super::matrix::Matrix;
@@ -79,13 +85,13 @@ pub mod data {
     pub use super::running_stats::RunningStats;
 }
 
-/// Fast Fourier transform types and functions.
+/// STFT / ISTFT — convert audio frames to/from complex spectra.
 pub mod fourier {
     pub use super::stft::{ComplexSpectrum, Istft, Stft, WindowType};
     pub use num_complex::Complex64 as Complex;
 }
 
-/// Audio feature extraction.
+/// Per-frame feature extraction: loudness, onsets, mel bands, partials, novelty.
 pub mod analyzation {
     pub use super::amp_feature::AmpFeature;
     pub use super::loudness::Loudness;
@@ -95,14 +101,14 @@ pub mod analyzation {
     pub use super::sine::{Sine, SortBy};
 }
 
-/// Spectral transformation.
+/// Spectral transformation: NMF morphing and audio transport.
 pub mod transformation {
     pub use super::audio_transport::AudioTransport;
     pub use super::nmf_filter::{NMFFilter, NmfResult};
     pub use super::nmf_morph::NMFMorph;
 }
 
-/// Audio source separation and decomposition.
+/// Source separation: HPSS, NMF, sinusoidal extraction, transient extraction.
 pub mod decomposition {
     pub use super::hpss::{Hpss, HpssMode, HpssParams};
     pub use super::nmf::Nmf;
@@ -111,7 +117,7 @@ pub mod decomposition {
     pub use super::transient_extraction::TransientExtraction;
 }
 
-/// Onset segmentation.
+/// Onset / event segmentation: amplitude, novelty, onset, transient slicers.
 pub mod segmentation {
     pub use super::amp_seg::AmpSlice;
     pub use super::novelty_seg::NoveltySlice;

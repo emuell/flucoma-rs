@@ -1,16 +1,22 @@
-# Safe Rust Bindings for flucoma-core
+# flucoma-rs
 
-`flucoma-rs` provides safe Rust bindings for the [flucoma-core](https://github.com/flucoma/flucoma-core) C++ audio analysis & segmentation library.
+Safe Rust bindings for [FluCoMa](https://www.flucoma.org/) (Fluid Corpus Manipulation), a set of
+C++ audio analysis and transformation algorithms developed for creative music applications.
 
-Note: When building this crate locally, clone the repository with `git clone --recurse-submodules <url>`. The flucoma-core C++ source is included as a git submodule under `vendor/flucoma-core/`.
-
+The underlying [flucoma-core](https://github.com/flucoma/flucoma-core) library covers spectral
+analysis, source separation, feature extraction, and event segmentation. This crate exposes those
+algorithms through idiomatic Rust wrappers with owned types, `Result`-based error handling, and no
+unsafe code in user-facing APIs.
 
 ## Status
 
-This is a work in progress. See [STATUS.md](./STATUS.md) which functions are wrapped, and which not. 
+This is a work in progress. 
+
+See [STATUS.md](./STATUS.md) for which functions are wrapped and which are not.
+
+## Contributing
 
 See [EXTEND.md](./EXTEND.md) on how to create new wrappers. Pull requests are welcome!
-
 
 ## Prerequisites
 
@@ -18,6 +24,8 @@ See [EXTEND.md](./EXTEND.md) on how to create new wrappers. Pull requests are we
 - C++17 compatible compiler (MSVC, clang++, or g++)
 - CMake (used to fetch and build Eigen, HISSTools, Spectra, and foonathan/memory)
 
+> Clone with `git clone --recurse-submodules <url>`. The flucoma-core
+> C++ source is included as a git submodule under `vendor/flucoma-core/`.
 
 ## CLI Examples
 

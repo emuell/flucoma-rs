@@ -1,8 +1,79 @@
-use flucoma_sys::{multistats_create, multistats_destroy, multistats_init, multistats_process, FlucomaIndex};
+use flucoma_sys::{
+    multistats_create, multistats_destroy, multistats_init, multistats_process, FlucomaIndex,
+};
 
-use crate::multi_stats::{outputs_from_raw, zero_outputs, MultiStatsOutput};
+use crate::{
+    data::MultiStatsValues,
+    multi_stats::{outputs_from_raw, zero_outputs, MultiStatsOutput},
+};
 
+// -------------------------------------------------------------------------------------------------
 
+/// Configuration for [`BufStats`].
+#[derive(Debug, Clone)]
+pub struct BufStatsConfig {
+    /// First frame index of the analysis window (0-based). Default: `0`.
+    pub start_frame: usize,
+    /// Number of frames to analyse. `None` selects all frames from `start_frame`. Default: `None`.
+    pub num_frames: Option<usize>,
+    /// First channel index of the analysis window (0-based). Default: `0`.
+    pub start_channel: usize,
+    /// Number of channels to analyse. `None` selects all channels from `start_channel`. Default: `None`.
+    pub num_channels: Option<usize>,
+    /// Number of temporal derivatives to summarise in addition to the signal itself. In `[0, 2]`.
+    pub num_derivatives: u8,
+    /// Low percentile value. Must be in `[0, 100]` and ≤ `middle_percentile`.
+    pub low_percentile: f64,
+    /// Middle (median) percentile value. Must be in `[0, 100]`.
+    pub middle_percentile: f64,
+    /// High percentile value. Must be in `[0, 100]` and ≥ `middle_percentile`.
+    pub high_percentile: f64,
+    /// If `Some(z)`, values further than `z` standard deviations from the mean are excluded.
+    /// `None` disables outlier removal.
+    pub outliers_cutoff: Option<f64>,
+}
+
+impl Default for BufStatsConfig {
+    fn default() -> Self {
+        Self {
+            start_frame: 0,
+            num_frames: None,
+            start_channel: 0,
+            num_channels: None,
+            num_derivatives: 0,
+            low_percentile: 0.0,
+            middle_percentile: 50.0,
+            high_percentile: 100.0,
+            outliers_cutoff: None,
+        }
+    }
+}
+
+impl BufStatsConfig {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.num_derivatives > 2 {
+            return Err("num_derivatives must be in [0, 2]");
+        }
+        if !(0.0..=100.0).contains(&self.low_percentile) {
+            return Err("low_percentile must be in [0, 100]");
+        }
+        if !(0.0..=100.0).contains(&self.middle_percentile) {
+            return Err("middle_percentile must be in [0, 100]");
+        }
+        if !(0.0..=100.0).contains(&self.high_percentile) {
+            return Err("high_percentile must be in [0, 100]");
+        }
+        if self.low_percentile > self.middle_percentile {
+            return Err("low_percentile must be <= middle_percentile");
+        }
+        if self.middle_percentile > self.high_percentile {
+            return Err("middle_percentile must be <= high_percentile");
+        }
+        Ok(())
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
 
 /// Offline summary statistics over a selected region of a multichannel buffer.
 ///
@@ -10,7 +81,7 @@ use crate::multi_stats::{outputs_from_raw, zero_outputs, MultiStatsOutput};
 /// it selects a frame range and channel range from the source buffer and then
 /// returns one [`MultiStatsOutput`] per selected channel.
 ///
-/// Unlike [`crate::data::MultiStats`], which always analyses the whole input
+/// Unlike [`MultiStats`](crate::data::MultiStats), which always analyses the whole input
 /// region passed to it, `BufStats` carries the slice selection in
 /// [`BufStatsConfig`].
 ///
@@ -34,39 +105,6 @@ pub struct BufStats {
     config: BufStatsConfig,
 }
 
-const STATS_PER_DERIVATIVE: usize = 7;
-
-/// Configuration for [`BufStats`].
-#[derive(Debug, Clone)]
-pub struct BufStatsConfig {
-    pub start_frame: usize,
-    pub num_frames: Option<usize>,
-    pub start_channel: usize,
-    pub num_channels: Option<usize>,
-    pub num_derivatives: u8,
-    pub low_percentile: f64,
-    pub middle_percentile: f64,
-    pub high_percentile: f64,
-    pub outliers_cutoff: Option<f64>,
-}
-
-impl Default for BufStatsConfig {
-    fn default() -> Self {
-        Self {
-            start_frame: 0,
-            num_frames: None,
-            start_channel: 0,
-            num_channels: None,
-            num_derivatives: 0,
-            low_percentile: 0.0,
-            middle_percentile: 50.0,
-            high_percentile: 100.0,
-            outliers_cutoff: None,
-        }
-    }
-}
-
-// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for BufStats {}
 
 impl BufStats {
@@ -77,7 +115,7 @@ impl BufStats {
     /// Returns an error if the configuration is invalid or if the underlying
     /// FluCoMa instance cannot be allocated.
     pub fn new(config: BufStatsConfig) -> Result<Self, &'static str> {
-        validate_config(&config)?;
+        config.validate()?;
         let inner = multistats_create();
         if inner.is_null() {
             return Err("failed to create MultiStats instance");
@@ -85,6 +123,7 @@ impl BufStats {
         Ok(Self { inner, config })
     }
 
+    /// Access to the current configuration.
     pub fn config(&self) -> &BufStatsConfig {
         &self.config
     }
@@ -94,7 +133,7 @@ impl BufStats {
     /// # Errors
     /// Returns an error if the new configuration is invalid.
     pub fn set_config(&mut self, config: BufStatsConfig) -> Result<(), &'static str> {
-        validate_config(&config)?;
+        config.validate()?;
         self.config = config;
         Ok(())
     }
@@ -194,7 +233,8 @@ impl BufStats {
             self.config.high_percentile,
         );
 
-        let values_per_channel = STATS_PER_DERIVATIVE * (self.config.num_derivatives as usize + 1);
+        let values_per_channel =
+            MultiStatsValues::NUM_VALUES * (self.config.num_derivatives as usize + 1);
         let mut raw = vec![0.0; selected_num_channels * values_per_channel];
         let (weights_ptr, weights_len) = match weights {
             Some(weight_slice) => (weight_slice.as_ptr(), weight_slice.len() as FlucomaIndex),
@@ -226,27 +266,7 @@ impl Drop for BufStats {
     }
 }
 
-fn validate_config(config: &BufStatsConfig) -> Result<(), &'static str> {
-    if config.num_derivatives > 2 {
-        return Err("num_derivatives must be in [0, 2]");
-    }
-    if !(0.0..=100.0).contains(&config.low_percentile) {
-        return Err("low_percentile must be in [0, 100]");
-    }
-    if !(0.0..=100.0).contains(&config.middle_percentile) {
-        return Err("middle_percentile must be in [0, 100]");
-    }
-    if !(0.0..=100.0).contains(&config.high_percentile) {
-        return Err("high_percentile must be in [0, 100]");
-    }
-    if config.low_percentile > config.middle_percentile {
-        return Err("low_percentile must be <= middle_percentile");
-    }
-    if config.middle_percentile > config.high_percentile {
-        return Err("middle_percentile must be <= high_percentile");
-    }
-    Ok(())
-}
+// -------------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

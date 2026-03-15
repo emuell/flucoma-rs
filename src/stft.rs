@@ -9,10 +9,14 @@ use num_complex::Complex64 as Complex;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[repr(isize)]
 pub enum WindowType {
+    /// Hann (raised-cosine) window — good general-purpose choice.
     #[default]
     Hann = 0,
+    /// Hamming window — slightly higher sidelobes than Hann, non-zero endpoints.
     Hamming = 1,
+    /// Blackman window — lower sidelobes, wider main lobe.
     Blackman = 2,
+    /// Rectangular (boxcar) window — no tapering; highest spectral leakage.
     Rectangular = 3,
 }
 
@@ -188,6 +192,15 @@ unsafe impl Send for Istft {}
 
 impl Istft {
     /// Create a new ISTFT synthesiser.
+    ///
+    /// # Arguments
+    /// * `window_size` - Synthesis window length in samples.
+    /// * `fft_size`    - FFT size (must be >= `window_size`, typically power of 2).
+    /// * `hop_size`    - Hop between successive frames in samples.
+    /// * `window_type` - Window function.
+    ///
+    /// # Errors
+    /// Returns an error string if parameters are invalid.
     pub fn new(
         window_size: usize,
         fft_size: usize,

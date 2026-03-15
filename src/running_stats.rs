@@ -32,7 +32,6 @@ pub struct RunningStats {
     stddev_buf: Vec<f64>,
 }
 
-// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for RunningStats {}
 
 impl RunningStats {
@@ -102,10 +101,12 @@ impl RunningStats {
         );
     }
 
+    /// Number of past vectors kept in the running window.
     pub fn history_size(&self) -> usize {
         self.history_size
     }
 
+    /// Length of each processed input vector.
     pub fn input_size(&self) -> usize {
         self.input_size
     }
@@ -116,6 +117,8 @@ impl Drop for RunningStats {
         running_stats_destroy(self.inner);
     }
 }
+
+// -------------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

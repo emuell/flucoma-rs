@@ -32,6 +32,8 @@ pub struct MultiStats {
     config: MultiStatsConfig,
 }
 
+// -------------------------------------------------------------------------------------------------
+
 /// Seven summary statistics for one derivative order.
 ///
 /// Each value stores the standard FluCoMa summary descriptors for one signal
@@ -45,26 +47,67 @@ pub struct MultiStats {
 /// - `high`
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct MultiStatsValues {
+    /// Arithmetic mean.
     pub mean: f64,
+    /// Sample standard deviation.
     pub std: f64,
+    /// Skewness (third standardised moment).
     pub skew: f64,
+    /// Excess kurtosis (fourth standardised moment).
     pub kurtosis: f64,
+    /// Low percentile value (controlled by [`MultiStatsConfig::low_percentile`]).
     pub low: f64,
+    /// Middle percentile value (controlled by [`MultiStatsConfig::middle_percentile`]).
     pub mid: f64,
+    /// High percentile value (controlled by [`MultiStatsConfig::high_percentile`]).
     pub high: f64,
 }
 
+impl MultiStatsValues {
+    pub const NUM_VALUES: usize = 7;
 
+    /// Create new stats from a f64 slice with at least 7 values.
+    pub fn from_slice(slice: &[f64]) -> Self {
+        Self {
+            mean: slice[0],
+            std: slice[1],
+            skew: slice[2],
+            kurtosis: slice[3],
+            low: slice[4],
+            mid: slice[5],
+            high: slice[6],
+        }
+    }
 
-const STATS_PER_DERIVATIVE: usize = 7;
+    /// Create new zeroed out, empty stats.
+    pub fn zero() -> Self {
+        Self {
+            mean: 0.0,
+            std: 0.0,
+            skew: 0.0,
+            kurtosis: 0.0,
+            low: 0.0,
+            mid: 0.0,
+            high: 0.0,
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
 
 /// Configuration for [`MultiStats`].
 #[derive(Debug, Clone)]
 pub struct MultiStatsConfig {
+    /// Number of temporal derivatives to summarise in addition to the signal itself. In `[0, 2]`.
     pub num_derivatives: u8,
+    /// Low percentile value. Must be in `[0, 100]` and ≤ `middle_percentile`.
     pub low_percentile: f64,
+    /// Middle (median) percentile value. Must be in `[0, 100]`.
     pub middle_percentile: f64,
+    /// High percentile value. Must be in `[0, 100]` and ≥ `middle_percentile`.
     pub high_percentile: f64,
+    /// If `Some(z)`, values further than `z` standard deviations from the mean are excluded.
+    /// `None` disables outlier removal.
     pub outliers_cutoff: Option<f64>,
 }
 
@@ -80,35 +123,33 @@ impl Default for MultiStatsConfig {
     }
 }
 
-
-
-impl MultiStatsValues {
-    pub(crate) fn from_slice(slice: &[f64]) -> Self {
-        Self {
-            mean: slice[0],
-            std: slice[1],
-            skew: slice[2],
-            kurtosis: slice[3],
-            low: slice[4],
-            mid: slice[5],
-            high: slice[6],
+impl MultiStatsConfig {
+    pub fn validate(&self) -> Result<(), &'static str> {
+        if self.num_derivatives > 2 {
+            return Err("num_derivatives must be in [0, 2]");
         }
-    }
-
-    pub(crate) fn zero() -> Self {
-        Self {
-            mean: 0.0,
-            std: 0.0,
-            skew: 0.0,
-            kurtosis: 0.0,
-            low: 0.0,
-            mid: 0.0,
-            high: 0.0,
+        if !(0.0..=100.0).contains(&self.low_percentile) {
+            return Err("low_percentile must be in [0, 100]");
         }
+        if !(0.0..=100.0).contains(&self.middle_percentile) {
+            return Err("middle_percentile must be in [0, 100]");
+        }
+        if !(0.0..=100.0).contains(&self.high_percentile) {
+            return Err("high_percentile must be in [0, 100]");
+        }
+        if self.low_percentile > self.middle_percentile {
+            return Err("low_percentile must be <= middle_percentile");
+        }
+        if self.middle_percentile > self.high_percentile {
+            return Err("middle_percentile must be <= high_percentile");
+        }
+        Ok(())
     }
 }
 
-/// Per-channel output of [`MultiStats`] and [`crate::data::BufStats`].
+// -------------------------------------------------------------------------------------------------
+
+/// Per-channel output of [`MultiStats`] and [`BufStats`](crate::data::BufStats).
 ///
 /// `stats` contains the summary values for the original signal. When
 /// derivatives are enabled in the configuration, `derivative_1` and
@@ -121,25 +162,12 @@ pub struct MultiStatsOutput {
     pub derivative_2: Option<MultiStatsValues>,
 }
 
-pub(crate) fn zero_outputs(
-    num_channels: usize,
-    num_derivatives: u8,
-) -> Vec<MultiStatsOutput> {
-    let zero = MultiStatsValues::zero();
-    let channel = MultiStatsOutput {
-        stats: zero,
-        derivative_1: (num_derivatives >= 1).then_some(zero),
-        derivative_2: (num_derivatives >= 2).then_some(zero),
-    };
-    vec![channel; num_channels]
-}
-
 pub(crate) fn outputs_from_raw(
     raw: &[f64],
     num_channels: usize,
     num_derivatives: u8,
 ) -> Vec<MultiStatsOutput> {
-    let values_per_channel = STATS_PER_DERIVATIVE * (num_derivatives as usize + 1);
+    let values_per_channel = MultiStatsValues::NUM_VALUES * (num_derivatives as usize + 1);
     raw.chunks_exact(values_per_channel)
         .take(num_channels)
         .map(|channel| MultiStatsOutput {
@@ -152,9 +180,19 @@ pub(crate) fn outputs_from_raw(
         .collect()
 }
 
+pub(crate) fn zero_outputs(num_channels: usize, num_derivatives: u8) -> Vec<MultiStatsOutput> {
+    let zero = MultiStatsValues::zero();
+    let channel = MultiStatsOutput {
+        stats: zero,
+        derivative_1: (num_derivatives >= 1).then_some(zero),
+        derivative_2: (num_derivatives >= 2).then_some(zero),
+    };
+    vec![channel; num_channels]
+}
 
-// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for MultiStats {}
+
+// -------------------------------------------------------------------------------------------------
 
 impl MultiStats {
     /// Create a new `MultiStats` processor with the given configuration.
@@ -163,7 +201,7 @@ impl MultiStats {
     /// Returns an error if the percentile or derivative settings are invalid,
     /// or if the underlying FluCoMa instance cannot be allocated.
     pub fn new(config: MultiStatsConfig) -> Result<Self, &'static str> {
-        validate_config(&config)?;
+        config.validate()?;
         let inner = multistats_create();
         if inner.is_null() {
             return Err("failed to create MultiStats instance");
@@ -171,6 +209,7 @@ impl MultiStats {
         Ok(Self { inner, config })
     }
 
+    /// Access to the current configuration.
     pub fn config(&self) -> &MultiStatsConfig {
         &self.config
     }
@@ -180,7 +219,7 @@ impl MultiStats {
     /// # Errors
     /// Returns an error if the new configuration is invalid.
     pub fn set_config(&mut self, config: MultiStatsConfig) -> Result<(), &'static str> {
-        validate_config(&config)?;
+        config.validate()?;
         self.config = config;
         Ok(())
     }
@@ -235,7 +274,8 @@ impl MultiStats {
             self.config.high_percentile,
         );
 
-        let values_per_channel = STATS_PER_DERIVATIVE * (self.config.num_derivatives as usize + 1);
+        let values_per_channel =
+            MultiStatsValues::NUM_VALUES * (self.config.num_derivatives as usize + 1);
         let mut raw = vec![0.0; num_channels * values_per_channel];
         let (weights_ptr, weights_len) = match weights {
             Some(weight_slice) => (weight_slice.as_ptr(), weight_slice.len() as FlucomaIndex),
@@ -267,27 +307,7 @@ impl Drop for MultiStats {
     }
 }
 
-fn validate_config(config: &MultiStatsConfig) -> Result<(), &'static str> {
-    if config.num_derivatives > 2 {
-        return Err("num_derivatives must be in [0, 2]");
-    }
-    if !(0.0..=100.0).contains(&config.low_percentile) {
-        return Err("low_percentile must be in [0, 100]");
-    }
-    if !(0.0..=100.0).contains(&config.middle_percentile) {
-        return Err("middle_percentile must be in [0, 100]");
-    }
-    if !(0.0..=100.0).contains(&config.high_percentile) {
-        return Err("high_percentile must be in [0, 100]");
-    }
-    if config.low_percentile > config.middle_percentile {
-        return Err("low_percentile must be <= middle_percentile");
-    }
-    if config.middle_percentile > config.high_percentile {
-        return Err("middle_percentile must be <= high_percentile");
-    }
-    Ok(())
-}
+// -------------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

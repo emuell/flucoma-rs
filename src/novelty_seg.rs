@@ -28,7 +28,7 @@ impl NoveltySlice {
     /// # Arguments
     /// * `kernel_size`  - Size of the checkerboard kernel (must be odd, >= 1).
     /// * `n_dims`       - Dimensionality of the input feature vectors.
-    /// * `filter_size`  - Median filter size applied to the novelty curve (must be odd, >= 1)
+    /// * `filter_size`  - Median filter size applied to the novelty curve (must be odd, >= 1).
     ///
     /// # Errors
     /// Returns an error string if parameters are invalid or allocation fails.
