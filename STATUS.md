@@ -8,6 +8,7 @@
 - [x] [`NoveltyFeature`](https://learn.flucoma.org/reference/noveltyfeature) as `flucoma_rs::analyzation::Novelty` -- self-similarity novelty feature
 - [x] [`SineFeature`](https://learn.flucoma.org/reference/sinefeature) as `flucoma_rs::analyzation::Sine` -- sinusoidal peak feature extraction
 - [x] [`AmpFeature`](https://learn.flucoma.org/reference/ampfeature) as `flucoma_rs::analyzation::AmpFeature` -- amplitude envelope follower
+- [ ] [`MFCC`](https://learn.flucoma.org/reference/mfcc) -- mel-frequency cepstral coefficients
 - [ ] [`SpectralShape`](https://learn.flucoma.org/reference/spectralshape) -- 7 shape descriptors: centroid, spread, skewness, kurtosis, rolloff, flatness, crest
 - [ ] [`ChromaFilterBank`](https://learn.flucoma.org/reference/chroma) -- chroma (pitch-class) filter bank
 - [ ] [`YINFFT`](https://learn.flucoma.org/reference/pitch) -- YIN pitch estimator (spectral domain)
@@ -37,8 +38,9 @@
 
 ### Machine Learning & Statistics (`flucoma_rs::data`)
 
-- [ ] [`MultiStats`](https://learn.flucoma.org/reference/stats) -- aggregate statistics (mean, std, min, max, ...) over a descriptor buffer
-- [ ] [`RunningStats`](https://learn.flucoma.org/reference/stats) -- incremental running statistics
+- [X] [`MultiStats`](https://learn.flucoma.org/reference/stats) -- aggregate statistics (mean, std, min, max, ...) over a descriptor buffer
+- [X] [`RunningStats`](https://learn.flucoma.org/reference/stats) -- incremental running statistics
+- [X] [`BufStats`](https://learn.flucoma.org/reference/stats) -- statistics over a selected region of a multichannel buffer
 - [ ] [`Normalization`](https://learn.flucoma.org/reference/normalize) -- min-max feature normalization
 - [ ] [`Standardization`](https://learn.flucoma.org/reference/standardize) -- Z-score standardization
 - [ ] [`RobustScaling`](https://learn.flucoma.org/reference/robustscale) -- robust (median/IQR) feature scaling
