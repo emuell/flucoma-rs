@@ -144,6 +144,15 @@ let value = odf.process_frame(
 println!("Onset value: {:.4}", value);
 ```
 
+## Optional Features
+
+### ndarray
+
+Enable the `ndarray` feature to pass `ndarray::Array2<f64>` directly to the flucoma data algorithms, and to convert returned `Matrix` values back to `ndarray::Array2`.
+Note: Arrays must be in standard (row-major) layout and must point to continous data.
+
+Via ndarray you can mix and match the existing flucoma algorithms with the [ndarray-ecosystem](https://docs.rs/ndarray/latest/ndarray/#the-ndarray-ecosystem).
+
 ## License
 
 `flucoma-rs` is licensed under the BSD-3-Clause license, consistent with the upstream flucoma-core library.

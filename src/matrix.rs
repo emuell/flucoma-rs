@@ -5,8 +5,10 @@
 /// Used to pass and receive 2-D data to/from e.g. NMF algorithms.
 ///
 /// # Layout
-/// Data is stored in **row-major** (C) order: element `(r, c)` is at index
-/// `r * cols + c`.
+/// Data is stored in **row-major** (C) order: element `(r, c)` is at index `r * cols + c`.
+///
+/// # ndarray interop
+/// With the `ndarray` feature enabled, `Matrix` can be converted to and from [`ndarray::Array2<f64>`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct Matrix {
     data: Vec<f64>,
@@ -95,7 +97,7 @@ impl Matrix {
 
 // -------------------------------------------------------------------------------------------------
 
-/// A borrowed, non-owning view of a row-major `f64` matrix. See also [`Matrix`].
+/// A borrowed, non-owning view of a row-major `f64` matrix.  See also [`Matrix`].
 ///
 /// `MatrixView` is `Copy` and cheap to pass around. Use it with algorithms
 /// that accept [`AsMatrixView`] to avoid unnecessary allocations.
@@ -135,7 +137,7 @@ impl<'a> MatrixView<'a> {
     }
 
     /// Flat row-major data slice.
-    pub fn data(&self) -> &[f64] {
+    pub fn data(&self) -> &'a [f64] {
         self.data
     }
 
@@ -162,7 +164,7 @@ impl<'a> MatrixView<'a> {
 
 // -------------------------------------------------------------------------------------------------
 
-/// A mutably borrowed, non-owning view of a row-major `f64` matrix.
+/// A mutably borrowed, non-owning view of a row-major `f64` matrix.  See also [`Matrix`].
 ///
 /// Use with algorithms that accept [`AsMatrixViewMut`] to write results into a
 /// pre-allocated buffer, avoiding per-call heap allocation.
@@ -220,6 +222,9 @@ impl<'a> MatrixViewMut<'a> {
 // -------------------------------------------------------------------------------------------------
 
 /// Conversion to a mutable borrowed [`MatrixViewMut`].
+///
+/// Implemented for [`Matrix`], [`MatrixViewMut`], and their mutable references.
+/// With the `ndarray` feature, also implemented for [`ndarray::ArrayViewMut2<f64>`].
 pub trait AsMatrixViewMut {
     fn as_matrix_view_mut(&mut self) -> MatrixViewMut<'_>;
 }
@@ -259,6 +264,10 @@ impl AsMatrixView for MatrixViewMut<'_> {
 // -------------------------------------------------------------------------------------------------
 
 /// Conversion to a borrowed [`MatrixView`].
+///
+/// Implemented for [`Matrix`], [`MatrixView`], [`MatrixViewMut`], and their references.
+/// With the `ndarray` feature, also implemented for [`ndarray::Array2<f64>`], [`ndarray::ArrayView2<f64>`],
+/// and [`ndarray::ArrayViewMut2<f64>`].
 pub trait AsMatrixView {
     fn as_matrix_view(&self) -> MatrixView<'_>;
 }
@@ -278,6 +287,70 @@ impl AsMatrixView for MatrixView<'_> {
 impl<T: AsMatrixView> AsMatrixView for &T {
     fn as_matrix_view(&self) -> MatrixView<'_> {
         (*self).as_matrix_view()
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+
+#[cfg(feature = "ndarray")]
+#[cfg_attr(docsrs, doc(cfg(feature = "ndarray")))]
+// Interoperability between flucoma-rs matrix types and [`ndarray`].
+mod ndarray_interop {
+    use super::*;
+    use ::ndarray::{Array2, ArrayView2, ArrayViewMut2};
+
+    // ndarray -> flucoma (immutable)
+    impl<'a> AsMatrixView for ArrayView2<'a, f64> {
+        fn as_matrix_view(&self) -> MatrixView<'_> {
+            let (rows, cols) = self.dim();
+            let slice = self
+                .as_slice()
+                .expect("ndarray must be contiguous standard layout (row-major)");
+            MatrixView::from_slice(slice, rows, cols).unwrap()
+        }
+    }
+    impl AsMatrixView for Array2<f64> {
+        fn as_matrix_view(&self) -> MatrixView<'_> {
+            let (rows, cols) = self.dim();
+            let slice = self
+                .as_slice()
+                .expect("ndarray must be contiguous standard layout (row-major)");
+            MatrixView::from_slice(slice, rows, cols).unwrap()
+        }
+    }
+
+    // ndarray -> flucoma (mutable)
+    impl<'a> AsMatrixViewMut for ArrayViewMut2<'a, f64> {
+        fn as_matrix_view_mut(&mut self) -> MatrixViewMut<'_> {
+            let (rows, cols) = self.dim();
+            let slice = self
+                .as_slice_mut()
+                .expect("ndarray must be contiguous standard layout (row-major)");
+            MatrixViewMut::from_slice(slice, rows, cols).unwrap()
+        }
+    }
+    impl<'a> AsMatrixView for ArrayViewMut2<'a, f64> {
+        fn as_matrix_view(&self) -> MatrixView<'_> {
+            let (rows, cols) = self.dim();
+            let slice = self
+                .as_slice()
+                .expect("ndarray must be contiguous standard layout (row-major)");
+            MatrixView::from_slice(slice, rows, cols).unwrap()
+        }
+    }
+
+    // flucoma -> ndarray
+    impl From<Matrix> for Array2<f64> {
+        fn from(m: Matrix) -> Self {
+            let rows = m.rows();
+            let cols = m.cols();
+            Array2::from_shape_vec((rows, cols), m.data).unwrap()
+        }
+    }
+    impl<'a> From<MatrixView<'a>> for ArrayView2<'a, f64> {
+        fn from(v: MatrixView<'a>) -> Self {
+            ArrayView2::from_shape((v.rows(), v.cols()), v.data()).unwrap()
+        }
     }
 }
 
@@ -342,5 +415,65 @@ mod tests {
         assert_eq!(t.rows(), 3);
         assert_eq!(t.cols(), 2);
         assert_eq!(t.data(), &[1.0, 4.0, 2.0, 5.0, 3.0, 6.0]);
+    }
+
+    #[cfg(feature = "ndarray")]
+    mod ndarray_tests {
+        use super::*;
+        use ::ndarray::{Array2, ArrayView2};
+
+        #[test]
+        fn array2_as_matrix_view() {
+            let a = Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+            let v = a.as_matrix_view();
+            assert_eq!(v.rows(), 2);
+            assert_eq!(v.cols(), 3);
+            assert_eq!(v.data(), a.as_slice().unwrap());
+        }
+
+        #[test]
+        fn array_view2_as_matrix_view() {
+            let a = Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+            let view: ArrayView2<f64> = a.view();
+            let mv = view.as_matrix_view();
+            assert_eq!(mv.rows(), 2);
+            assert_eq!(mv.cols(), 3);
+        }
+
+        #[test]
+        fn array_view_mut2_as_matrix_view_mut() {
+            let mut a = Array2::from_shape_vec((2, 2), vec![1.0, 2.0, 3.0, 4.0]).unwrap();
+            let mut view = a.view_mut();
+            let mv = view.as_matrix_view_mut();
+            assert_eq!(mv.rows(), 2);
+            assert_eq!(mv.cols(), 2);
+        }
+
+        #[test]
+        fn matrix_into_array2() {
+            let m = Matrix::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 2, 3).unwrap();
+            let a: Array2<f64> = m.into();
+            assert_eq!(a.dim(), (2, 3));
+            assert_eq!(a[[0, 0]], 1.0);
+            assert_eq!(a[[1, 2]], 6.0);
+        }
+
+        #[test]
+        fn matrix_view_into_array_view2() {
+            let m = Matrix::from_vec(vec![1.0, 2.0, 3.0, 4.0], 2, 2).unwrap();
+            let view = m.view();
+            let av: ArrayView2<f64> = view.into();
+            assert_eq!(av.dim(), (2, 2));
+            assert_eq!(av[[0, 1]], 2.0);
+        }
+
+        #[test]
+        #[should_panic(expected = "contiguous standard layout")]
+        fn non_standard_layout_panics() {
+            // Transpose produces a Fortran-order (column-major) view
+            let a = Array2::from_shape_vec((2, 3), vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+            let transposed = a.t(); // non-contiguous / non-standard layout
+            let _ = transposed.as_matrix_view();
+        }
     }
 }
