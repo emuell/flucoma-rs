@@ -1,12 +1,41 @@
 use flucoma_sys::grid_process;
 
-/// Grid redistribution for 2D point sets.
+// -------------------------------------------------------------------------------------------------
+
+/// Redistribute a 2D point set onto a regular grid.
+///
+/// Given an arbitrary set of 2D points, `Grid` finds an assignment that places
+/// each point on a grid cell while minimising the total displacement — useful
+/// for generating ordered visual layouts from unordered data.
+///
+/// # Usage
+/// ```no_run
+/// use flucoma_rs::data::Grid;
+///
+/// let points = vec![0.1, 0.2,  0.8, 0.9,  0.5, 0.5,  0.0, 1.0];
+/// let out = Grid::process(&points, 4, 1, 0, 0).unwrap();
+/// // `out` contains 4 (x, y) grid-cell coordinates
+/// ```
+///
+/// See <https://learn.flucoma.org/reference/grid>
 pub struct Grid;
 
 impl Grid {
     /// Redistribute 2D points to grid coordinates.
     ///
-    /// `input` must be row-major `[x0,y0, x1,y1, ...]`.
+    /// Returns a flat row-major `[x0,y0, x1,y1, ...]` vector of grid-cell
+    /// coordinates, one per input point.
+    ///
+    /// # Arguments
+    /// * `input` — row-major `[x0,y0, x1,y1, ...]`; length must be `rows * 2`.
+    /// * `rows` — number of points (must be > 0).
+    /// * `over_sample` — oversampling factor for the assignment solver (must be > 0).
+    /// * `extent` — neighbourhood extent used during assignment (0 = automatic).
+    /// * `axis` — primary sort axis: `0` = x, `1` = y.
+    ///
+    /// # Errors
+    /// Returns an error if arguments are out of range or the underlying
+    /// assignment fails.
     pub fn process(
         input: &[f64],
         rows: usize,
@@ -41,6 +70,8 @@ impl Grid {
         Ok(out)
     }
 }
+
+// -------------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {

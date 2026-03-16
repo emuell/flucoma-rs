@@ -63,8 +63,8 @@ mod kdtree;
 mod kmeans;
 mod loudness;
 mod matrix;
-mod mel_bands;
 mod mds;
+mod mel_bands;
 mod multi_stats;
 mod nmf;
 mod nmf_filter;
@@ -74,12 +74,12 @@ mod novelty_feature;
 mod novelty_seg;
 mod onset;
 mod onset_seg;
-mod running_stats;
 mod pca;
 mod robust_scale;
+mod running_stats;
 mod sine;
-mod standardize;
 mod sine_extraction;
+mod standardize;
 mod stft;
 mod transient_extraction;
 mod transient_seg;
@@ -88,19 +88,20 @@ mod transient_seg;
 pub mod data {
     pub use super::bufstats::{BufStats, BufStatsConfig};
     pub use super::dataset_query::{
-        ComparisonOp, DataSetQuery, DataSetQueryResult, QueryCondition,
+        DataSetComparisonOp, DataSetQuery, DataSetQueryCondition, DataSetQueryResult,
     };
     pub use super::grid::Grid;
+    pub use super::kdtree::KDTree;
     pub use super::kmeans::{KMeans, KMeansConfig, KMeansInit, KMeansResult, SKMeans};
     pub use super::matrix::Matrix;
     pub use super::mds::{Mds, MdsDistance};
     pub use super::multi_stats::{
         MultiStats, MultiStatsConfig, MultiStatsOutput, MultiStatsValues,
     };
-    pub use super::running_stats::RunningStats;
     pub use super::normalize::Normalize;
     pub use super::pca::{Pca, PcaConfig, PcaScaler};
     pub use super::robust_scale::RobustScale;
+    pub use super::running_stats::RunningStats;
     pub use super::standardize::Standardize;
 }
 
@@ -142,8 +143,4 @@ pub mod segmentation {
     pub use super::novelty_seg::NoveltySlice;
     pub use super::onset_seg::OnsetSlice;
     pub use super::transient_seg::TransientSlice;
-}
-
-pub mod search {
-    pub use super::kdtree::KDTree;
 }

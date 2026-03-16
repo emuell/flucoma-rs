@@ -1,50 +1,109 @@
+use crate::matrix::Matrix;
 use flucoma_sys::dataset_query_process;
 
+// -------------------------------------------------------------------------------------------------
+
+/// Comparison operator used in a [`DataSetQueryCondition`].
 #[derive(Debug, Clone, Copy)]
 #[repr(isize)]
-pub enum ComparisonOp {
+pub enum DataSetComparisonOp {
+    /// Equal (`==`).
     Eq = 0,
+    /// Not equal (`!=`).
     Ne = 1,
+    /// Less than (`<`).
     Lt = 2,
+    /// Less than or equal (`<=`).
     Le = 3,
+    /// Greater than (`>`).
     Gt = 4,
+    /// Greater than or equal (`>=`).
     Ge = 5,
 }
 
+// -------------------------------------------------------------------------------------------------
+
+/// A single filter condition applied to one column of a dataset in [`DataSetQuery`].
 #[derive(Debug, Clone, Copy)]
-pub struct QueryCondition {
+pub struct DataSetQueryCondition {
+    /// Zero-based column index to test.
     pub column: usize,
-    pub op: ComparisonOp,
+    /// Comparison operator.
+    pub op: DataSetComparisonOp,
+    /// Threshold value.
     pub value: f64,
-    /// `true` = AND condition list, `false` = OR condition list.
+    /// `true` — this condition is ANDed with others; `false` — ORed.
     pub and_group: bool,
 }
 
+// -------------------------------------------------------------------------------------------------
+
+/// Result of a [`DataSetQuery::execute`] call.
 #[derive(Debug, Clone)]
 pub struct DataSetQueryResult {
-    pub data: Vec<f64>,
-    pub rows: usize,
-    pub cols: usize,
+    /// Row-major output matrix of the selected columns.
+    pub data: Matrix,
+    /// Row indices in the original dataset for each returned row.
     pub source_indices: Vec<usize>,
 }
 
+// -------------------------------------------------------------------------------------------------
+
+/// SQL-like filter and column selection over a flat row-major dataset.
+///
+/// `DataSetQuery` lets you select a subset of columns and filter rows by one
+/// or more conditions, optionally limiting the number of results.
+///
+/// # Usage
+/// ```no_run
+/// use flucoma_rs::data::{DataSetQuery, DataSetQueryCondition, DataSetComparisonOp, Matrix};
+///
+/// // 4×3 row-major dataset
+/// let data = Matrix::from_vec(vec![
+///     0.0, 10.0, 100.0,
+///     1.0, 20.0, 200.0,
+///     2.0, 30.0, 300.0,
+///     3.0, 40.0, 400.0,
+/// ], 4, 3).unwrap();
+///
+/// let conditions = [DataSetQueryCondition {
+///     column: 0,
+///     op: DataSetComparisonOp::Ge,
+///     value: 2.0,
+///     and_group: true,
+/// }];
+///
+/// let result = DataSetQuery::execute(&data, &[1, 2], &conditions, None).unwrap();
+/// println!("{} rows matched", result.data.rows());
+/// ```
+///
+/// See <https://learn.flucoma.org/reference/datasetquery>
 pub struct DataSetQuery;
 
 impl DataSetQuery {
+    /// Execute a query against a row-major dataset.
+    ///
+    /// Selects `selected_columns` from rows that satisfy all `conditions`,
+    /// returning at most `limit` rows (or all matching rows when `None`).
+    ///
+    /// # Arguments
+    /// * `data` — row-major input matrix.
+    /// * `selected_columns` — zero-based column indices to include in output (non-empty).
+    /// * `conditions` — filter conditions; empty slice returns all rows.
+    /// * `limit` — maximum number of rows to return, or `None` for no limit.
+    ///
+    /// # Errors
+    /// Returns an error if `selected_columns` is empty, any column index is
+    /// out of range, or the underlying query fails.
     pub fn execute(
-        data: &[f64],
-        rows: usize,
-        cols: usize,
+        data: &Matrix,
         selected_columns: &[usize],
-        conditions: &[QueryCondition],
+        conditions: &[DataSetQueryCondition],
         limit: Option<usize>,
     ) -> Result<DataSetQueryResult, &'static str> {
-        if rows == 0 || cols == 0 {
-            return Err("rows and cols must be > 0");
-        }
-        if data.len() != rows * cols {
-            return Err("data length does not match rows * cols");
-        }
+        let rows = data.rows();
+        let cols = data.cols();
+
         if selected_columns.is_empty() {
             return Err("selected_columns cannot be empty");
         }
@@ -69,7 +128,7 @@ impl DataSetQuery {
         let mut out_count = 0isize;
 
         let ok = dataset_query_process(
-            data.as_ptr(),
+            data.data().as_ptr(),
             rows as isize,
             cols as isize,
             selected_cols.as_ptr(),
@@ -92,13 +151,13 @@ impl DataSetQuery {
         out_data.truncate(count * selected_columns.len());
         out_ids.truncate(count);
         Ok(DataSetQueryResult {
-            data: out_data,
-            rows: count,
-            cols: selected_columns.len(),
+            data: Matrix::from_vec(out_data, count, selected_columns.len()).unwrap(),
             source_indices: out_ids.into_iter().map(|x| x as usize).collect(),
         })
     }
 }
+
+// -------------------------------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -106,24 +165,29 @@ mod tests {
 
     #[test]
     fn query_select_and_filter() {
+        use crate::matrix::Matrix;
         // 5x3 row-major
-        let data = vec![
-            0.0, 10.0, 100.0, //
-            1.0, 20.0, 200.0, //
-            2.0, 30.0, 300.0, //
-            3.0, 40.0, 400.0, //
-            4.0, 50.0, 500.0,
-        ];
-        let conditions = [QueryCondition {
+        let data = Matrix::from_vec(
+            vec![
+                0.0, 10.0, 100.0, //
+                1.0, 20.0, 200.0, //
+                2.0, 30.0, 300.0, //
+                3.0, 40.0, 400.0, //
+                4.0, 50.0, 500.0,
+            ],
+            5,
+            3,
+        )
+        .unwrap();
+        let conditions = [DataSetQueryCondition {
             column: 0,
-            op: ComparisonOp::Ge,
+            op: DataSetComparisonOp::Ge,
             value: 2.0,
             and_group: true,
         }];
-        let res = DataSetQuery::execute(&data, 5, 3, &[1, 2], &conditions, Some(2)).unwrap();
-        assert_eq!(res.rows, 2);
-        assert_eq!(res.cols, 2);
-        assert_eq!(res.data.len(), 4);
+        let res = DataSetQuery::execute(&data, &[1, 2], &conditions, Some(2)).unwrap();
+        assert_eq!(res.data.rows(), 2);
+        assert_eq!(res.data.cols(), 2);
         assert_eq!(res.source_indices.len(), 2);
     }
 }

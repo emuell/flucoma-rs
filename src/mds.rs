@@ -1,27 +1,67 @@
+use crate::matrix::Matrix;
 use flucoma_sys::{mds_create, mds_destroy, mds_process, FlucomaIndex};
 
+// -------------------------------------------------------------------------------------------------
+
+/// Distance metric used by [`Mds`] when computing the pairwise distance matrix.
 #[derive(Debug, Clone, Copy)]
 #[repr(isize)]
 pub enum MdsDistance {
+    /// L1 (sum of absolute differences).
     Manhattan = 0,
+    /// L2 (square root of sum of squared differences).
     Euclidean = 1,
+    /// Squared L2 (sum of squared differences).
     SquaredEuclidean = 2,
+    /// Chebyshev / L∞ (maximum absolute difference).
     Max = 3,
+    /// Minimum absolute difference across dimensions.
     Min = 4,
+    /// Kullback–Leibler divergence (requires non-negative inputs).
     KullbackLeibler = 5,
+    /// Cosine dissimilarity (`1 − cos θ`).
     Cosine = 6,
+    /// Jensen–Shannon divergence.
     JensenShannon = 7,
 }
 
-/// Multidimensional scaling projection for row-major datasets.
+// -------------------------------------------------------------------------------------------------
+
+/// Multidimensional scaling (MDS) dimensionality reduction.
+///
+/// Projects a row-major dataset into a lower-dimensional space by preserving
+/// pairwise distances as well as possible. MDS is useful for visualisation
+/// and for feeding distance-based representations into downstream algorithms.
+///
+/// # Usage
+/// ```no_run
+/// use flucoma_rs::data::{Mds, MdsDistance, Matrix};
+///
+/// let data = Matrix::from_vec(vec![
+///     1.0, 0.0,
+///     0.0, 1.0,
+///     -1.0, 0.0,
+///     0.0, -1.0,
+/// ], 4, 2).unwrap();
+///
+/// let mut mds = Mds::new().unwrap();
+/// let out = mds.project(&data, 2, MdsDistance::Euclidean).unwrap();
+/// assert_eq!(out.rows(), 4);
+/// assert_eq!(out.cols(), 2);
+/// ```
+///
+/// See <https://learn.flucoma.org/reference/mds>
 pub struct Mds {
     inner: *mut u8,
 }
 
-// SAFETY: flucoma algorithms are thread-safe to move between threads.
 unsafe impl Send for Mds {}
 
 impl Mds {
+    /// Create a new MDS instance.
+    ///
+    /// # Errors
+    /// Returns an error if the underlying C++ allocation fails.
     pub fn new() -> Result<Self, &'static str> {
         let inner = mds_create();
         if inner.is_null() {
@@ -30,20 +70,26 @@ impl Mds {
         Ok(Self { inner })
     }
 
+    /// Project a row-major dataset into a lower-dimensional space.
+    ///
+    /// Returns a matrix of shape `data.rows() × target_dims`.
+    ///
+    /// # Arguments
+    /// * `data` — row-major input matrix.
+    /// * `target_dims` — output dimensionality (must be in `[1, data.rows()]`).
+    /// * `distance` — distance metric used to build the pairwise distance matrix.
+    ///
+    /// # Errors
+    /// Returns an error if `target_dims` is out of range.
     pub fn project(
         &mut self,
-        data: &[f64],
-        rows: usize,
-        cols: usize,
+        data: &Matrix,
         target_dims: usize,
         distance: MdsDistance,
-    ) -> Result<Vec<f64>, &'static str> {
-        if rows == 0 || cols == 0 {
-            return Err("rows and cols must be > 0");
-        }
-        if data.len() != rows * cols {
-            return Err("data length does not match rows * cols");
-        }
+    ) -> Result<Matrix, &'static str> {
+        let rows = data.rows();
+        let cols = data.cols();
+
         if target_dims == 0 {
             return Err("target_dims must be > 0");
         }
@@ -54,14 +100,14 @@ impl Mds {
         let mut out = vec![0.0; rows * target_dims];
         mds_process(
             self.inner,
-            data.as_ptr(),
+            data.data().as_ptr(),
             rows as FlucomaIndex,
             cols as FlucomaIndex,
             out.as_mut_ptr(),
             target_dims as FlucomaIndex,
             distance as FlucomaIndex,
         );
-        Ok(out)
+        Ok(Matrix::from_vec(out, rows, target_dims).unwrap())
     }
 }
 
@@ -71,33 +117,39 @@ impl Drop for Mds {
     }
 }
 
+// -------------------------------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn mds_projection_shape_and_finite_values() {
-        let data = vec![
-            0.0, 0.0, //
-            0.0, 1.0, //
-            1.0, 0.0, //
-            1.0, 1.0,
-        ];
+        use crate::matrix::Matrix;
+        let data = Matrix::from_vec(
+            vec![
+                0.0, 0.0, //
+                0.0, 1.0, //
+                1.0, 0.0, //
+                1.0, 1.0,
+            ],
+            4,
+            2,
+        )
+        .unwrap();
         let mut mds = Mds::new().unwrap();
-        let out = mds
-            .project(&data, 4, 2, 2, MdsDistance::Euclidean)
-            .unwrap();
-        assert_eq!(out.len(), 8);
-        assert!(out.iter().all(|v| v.is_finite()));
+        let out = mds.project(&data, 2, MdsDistance::Euclidean).unwrap();
+        assert_eq!(out.rows(), 4);
+        assert_eq!(out.cols(), 2);
+        assert!(out.data().iter().all(|v| v.is_finite()));
     }
 
     #[test]
     fn mds_rejects_invalid_target_dims() {
-        let data = vec![0.0, 0.0, 1.0, 1.0];
+        use crate::matrix::Matrix;
+        let data = Matrix::from_vec(vec![0.0, 0.0, 1.0, 1.0], 2, 2).unwrap();
         let mut mds = Mds::new().unwrap();
-        let err = mds
-            .project(&data, 2, 2, 3, MdsDistance::Euclidean)
-            .unwrap_err();
+        let err = mds.project(&data, 3, MdsDistance::Euclidean).unwrap_err();
         assert_eq!(err, "target_dims must be <= rows");
     }
 }
