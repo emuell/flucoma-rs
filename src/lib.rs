@@ -93,7 +93,7 @@ pub mod data {
     pub use super::grid::Grid;
     pub use super::kdtree::KDTree;
     pub use super::kmeans::{KMeans, KMeansConfig, KMeansInit, KMeansResult, SKMeans};
-    pub use super::matrix::Matrix;
+    pub use super::matrix::{AsMatrixView, AsMatrixViewMut, Matrix, MatrixView, MatrixViewMut};
     pub use super::mds::{Mds, MdsDistance};
     pub use super::multi_stats::{
         MultiStats, MultiStatsConfig, MultiStatsOutput, MultiStatsValues,

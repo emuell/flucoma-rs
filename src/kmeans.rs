@@ -3,7 +3,7 @@ use flucoma_sys::{
     skmeans_fit, FlucomaIndex,
 };
 
-use crate::matrix::Matrix;
+use crate::matrix::{AsMatrixView, Matrix, MatrixView};
 
 // -------------------------------------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ impl Default for KMeansConfig {
 }
 
 impl KMeansConfig {
-    fn validate_input(&self, data: &Matrix) -> Result<(), &'static str> {
+    fn validate_input(&self, data: MatrixView<'_>) -> Result<(), &'static str> {
         if self.k == 0 {
             return Err("k must be > 0");
         }
@@ -126,9 +126,10 @@ impl KMeans {
     /// Returns an error if `data` dimensions are invalid or `config` is invalid.
     pub fn fit(
         &mut self,
-        data: &Matrix,
+        data: impl AsMatrixView,
         config: KMeansConfig,
     ) -> Result<KMeansResult, &'static str> {
+        let data = data.as_matrix_view();
         config.validate_input(data)?;
         let rows = data.rows();
         let dims = data.cols();
@@ -210,9 +211,10 @@ impl SKMeans {
     /// Returns an error if `data` dimensions are invalid or `config` is invalid.
     pub fn fit(
         &mut self,
-        data: &Matrix,
+        data: impl AsMatrixView,
         config: KMeansConfig,
     ) -> Result<KMeansResult, &'static str> {
+        let data = data.as_matrix_view();
         config.validate_input(data)?;
         let rows = data.rows();
         let dims = data.cols();
@@ -251,7 +253,8 @@ impl SKMeans {
     ///
     /// # Errors
     /// Returns an error if the model has not been fitted or dimensions are invalid.
-    pub fn encode(&self, data: &Matrix, alpha: f64) -> Result<Matrix, &'static str> {
+    pub fn encode(&self, data: impl AsMatrixView, alpha: f64) -> Result<Matrix, &'static str> {
+        let data = data.as_matrix_view();
         if self.k == 0 {
             return Err("SKMeans is not fitted");
         }

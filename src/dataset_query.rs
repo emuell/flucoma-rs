@@ -1,4 +1,4 @@
-use crate::matrix::Matrix;
+use crate::matrix::{AsMatrixView, Matrix};
 use flucoma_sys::dataset_query_process;
 
 // -------------------------------------------------------------------------------------------------
@@ -96,11 +96,12 @@ impl DataSetQuery {
     /// Returns an error if `selected_columns` is empty, any column index is
     /// out of range, or the underlying query fails.
     pub fn execute(
-        data: &Matrix,
+        data: impl AsMatrixView,
         selected_columns: &[usize],
         conditions: &[DataSetQueryCondition],
         limit: Option<usize>,
     ) -> Result<DataSetQueryResult, &'static str> {
+        let data = data.as_matrix_view();
         let rows = data.rows();
         let cols = data.cols();
 
