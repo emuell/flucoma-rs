@@ -3,7 +3,7 @@ use flucoma_sys::{
     robust_scaling_process, FlucomaIndex,
 };
 
-use crate::matrix::Matrix;
+use crate::matrix::{AsMatrixView, AsMatrixViewMut, Matrix, MatrixView, MatrixViewMut};
 
 // -------------------------------------------------------------------------------------------------
 
@@ -75,7 +75,8 @@ impl RobustScale {
     ///
     /// Computes per-column medians and percentile-based spread. Calling `fit`
     /// again on new data overwrites the previously learned statistics.
-    pub fn fit(&mut self, data: &Matrix) -> Result<(), &'static str> {
+    pub fn fit(&mut self, data: impl AsMatrixView) -> Result<(), &'static str> {
+        let data = data.as_matrix_view();
         robust_scaling_fit(
             self.inner,
             self.low_percentile,
@@ -93,8 +94,21 @@ impl RobustScale {
     /// # Errors
     /// Returns an error if the scaler has not been fitted yet, or if the
     /// matrix column count differs from the fitted feature dimension.
-    pub fn transform(&self, data: &Matrix) -> Result<Matrix, &'static str> {
-        self.process_internal(data, false)
+    pub fn transform(&self, data: impl AsMatrixView) -> Result<Matrix, &'static str> {
+        self.process_internal(data.as_matrix_view(), false)
+    }
+
+    /// Scale a matrix using the fitted statistics, writing results into a pre-allocated buffer.
+    ///
+    /// # Errors
+    /// Returns an error if the scaler is not fitted, column counts differ, or
+    /// output dimensions do not match input dimensions.
+    pub fn transform_into(
+        &self,
+        data: impl AsMatrixView,
+        mut output: impl AsMatrixViewMut,
+    ) -> Result<(), &'static str> {
+        self.process_internal_into(data.as_matrix_view(), output.as_matrix_view_mut(), false)
     }
 
     /// Recover the original scale by reversing a previous [`transform`](Self::transform).
@@ -102,8 +116,21 @@ impl RobustScale {
     /// # Errors
     /// Returns an error if the scaler has not been fitted yet, or if the
     /// matrix column count differs from the fitted feature dimension.
-    pub fn inverse_transform(&self, data: &Matrix) -> Result<Matrix, &'static str> {
-        self.process_internal(data, true)
+    pub fn inverse_transform(&self, data: impl AsMatrixView) -> Result<Matrix, &'static str> {
+        self.process_internal(data.as_matrix_view(), true)
+    }
+
+    /// Reverse a previous [`transform`](Self::transform), writing results into a pre-allocated buffer.
+    ///
+    /// # Errors
+    /// Returns an error if the scaler is not fitted, column counts differ, or
+    /// output dimensions do not match input dimensions.
+    pub fn inverse_transform_into(
+        &self,
+        data: impl AsMatrixView,
+        mut output: impl AsMatrixViewMut,
+    ) -> Result<(), &'static str> {
+        self.process_internal_into(data.as_matrix_view(), output.as_matrix_view_mut(), true)
     }
 
     /// Fit the scaler and transform the same matrix in one step.
@@ -113,7 +140,8 @@ impl RobustScale {
     ///
     /// # Errors
     /// Propagates errors from [`fit`](Self::fit) or [`transform`](Self::transform).
-    pub fn fit_transform(&mut self, data: &Matrix) -> Result<Matrix, &'static str> {
+    pub fn fit_transform(&mut self, data: impl AsMatrixView) -> Result<Matrix, &'static str> {
+        let data = data.as_matrix_view();
         self.fit(data)?;
         self.transform(data)
     }
@@ -122,22 +150,39 @@ impl RobustScale {
         robust_scaling_initialized(self.inner)
     }
 
-    fn process_internal(&self, data: &Matrix, inverse: bool) -> Result<Matrix, &'static str> {
+    fn process_internal_into(
+        &self,
+        data: MatrixView<'_>,
+        mut output: MatrixViewMut<'_>,
+        inverse: bool,
+    ) -> Result<(), &'static str> {
         if !self.is_fitted() {
             return Err("robust scaler is not fitted");
         }
         if self.cols != Some(data.cols()) {
             return Err("cols must match fitted feature dimension");
         }
-        let mut out = Matrix::new(data.rows(), data.cols());
+        if output.rows() != data.rows() || output.cols() != data.cols() {
+            return Err("output dimensions must match input dimensions");
+        }
         robust_scaling_process(
             self.inner,
             data.data().as_ptr(),
             data.rows() as FlucomaIndex,
             data.cols() as FlucomaIndex,
-            out.data_mut().as_mut_ptr(),
+            output.data_mut().as_mut_ptr(),
             inverse,
         );
+        Ok(())
+    }
+
+    fn process_internal(
+        &self,
+        data: MatrixView<'_>,
+        inverse: bool,
+    ) -> Result<Matrix, &'static str> {
+        let mut out = Matrix::new(data.rows(), data.cols());
+        self.process_internal_into(data, out.view_mut(), inverse)?;
         Ok(out)
     }
 }
@@ -172,5 +217,28 @@ mod tests {
         let data = Matrix::from_vec(vec![1.0, 2.0], 1, 2).unwrap();
         let err = r.transform(&data).unwrap_err();
         assert_eq!(err, "robust scaler is not fitted");
+    }
+
+    #[test]
+    fn transform_into_matches_transform() {
+        let data =
+            Matrix::from_vec(vec![1.0, 10.0, 3.0, 20.0, 5.0, 30.0, 1000.0, -999.0], 4, 2).unwrap();
+        let mut r = RobustScale::new(25.0, 75.0).unwrap();
+        r.fit(&data).unwrap();
+        let expected = r.transform(&data).unwrap();
+        let mut out = Matrix::new(4, 2);
+        r.transform_into(&data, &mut out).unwrap();
+        assert_eq!(expected.data(), out.data());
+    }
+
+    #[test]
+    fn transform_into_wrong_dims_fails() {
+        let data =
+            Matrix::from_vec(vec![1.0, 10.0, 3.0, 20.0, 5.0, 30.0, 1000.0, -999.0], 4, 2).unwrap();
+        let mut r = RobustScale::new(25.0, 75.0).unwrap();
+        r.fit(&data).unwrap();
+        let mut out = Matrix::new(2, 2);
+        let err = r.transform_into(&data, &mut out).unwrap_err();
+        assert_eq!(err, "output dimensions must match input dimensions");
     }
 }

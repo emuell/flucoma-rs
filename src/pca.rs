@@ -3,7 +3,7 @@ use flucoma_sys::{
     pca_transform, FlucomaIndex,
 };
 
-use crate::matrix::Matrix;
+use crate::matrix::{AsMatrixView, Matrix, MatrixView};
 use crate::normalize::Normalize;
 use crate::robust_scale::RobustScale;
 use crate::standardize::Standardize;
@@ -63,15 +63,12 @@ impl PcaScaler {
 // -------------------------------------------------------------------------------------------------
 
 /// Configuration for a [`Pca`] processor.
-///
-/// * `whiten` — divide projected components by their standard deviation so
-///   each component has unit variance. Useful when feeding PCA output into a
-///   distance-based algorithm.
-/// * `scaler` — optional preprocessing scaler applied before fitting and
-///   transforming. See [`PcaScaler`].
 #[derive(Debug, Clone, Copy)]
 pub struct PcaConfig {
+    /// Divide projected components by their standard deviation so each component has unit variance.
+    /// Useful when feeding PCA output into a distance-based algorithm.
     pub whiten: bool,
+    /// Optional preprocessing scaler applied before fitting and transforming. See [`PcaScaler`].
     pub scaler: PcaScaler,
 }
 
@@ -168,11 +165,24 @@ impl Pca {
     ///
     /// # Errors
     /// Propagates errors from the configured scaler's fit step.
-    pub fn fit(&mut self, data: &Matrix) -> Result<(), &'static str> {
-        let (scaled_data, fitted_scaler) = self.fit_scaler_and_transform(data)?;
+    pub fn fit(&mut self, data: impl AsMatrixView) -> Result<(), &'static str> {
+        let data = data.as_matrix_view();
+        let fitted_scaler;
+        let _scaled_data; // keep owned Matrix alive through pca_fit
+        let data_ptr = if matches!(self.config.scaler, PcaScaler::None) {
+            fitted_scaler = FittedScaler::None;
+            _scaled_data = None::<Matrix>;
+            data.data().as_ptr()
+        } else {
+            let (scaled, scaler) = self.fit_scaler_and_transform(data)?;
+            fitted_scaler = scaler;
+            let ptr = scaled.data().as_ptr();
+            _scaled_data = Some(scaled);
+            ptr
+        };
         pca_fit(
             self.inner,
-            scaled_data.data().as_ptr(),
+            data_ptr,
             data.rows() as FlucomaIndex,
             data.cols() as FlucomaIndex,
         );
@@ -196,9 +206,10 @@ impl Pca {
     /// Propagates errors from [`fit`](Self::fit) or [`transform`](Self::transform).
     pub fn fit_transform(
         &mut self,
-        data: &Matrix,
+        data: impl AsMatrixView,
         target_dims: usize,
     ) -> Result<(Matrix, f64), &'static str> {
+        let data = data.as_matrix_view();
         self.fit(data)?;
         self.transform(data, target_dims)
     }
@@ -222,9 +233,10 @@ impl Pca {
     /// match the fitted dimension, or if `target_dims` is out of range.
     pub fn transform(
         &self,
-        data: &Matrix,
+        data: impl AsMatrixView,
         target_dims: usize,
     ) -> Result<(Matrix, f64), &'static str> {
+        let data = data.as_matrix_view();
         self.ensure_fitted(data.cols())?;
         if target_dims == 0 {
             return Err("target_dims must be > 0");
@@ -233,11 +245,23 @@ impl Pca {
             return Err("target_dims must be <= input cols");
         }
 
-        let scaled_data = self.apply_scaler_transform(data)?;
+        let _scaled_data; // keep owned Matrix alive through pca_transform
+        let data_ptr = match self.fitted_scaler.as_ref().ok_or("PCA is not fitted")? {
+            FittedScaler::None => {
+                _scaled_data = None::<Matrix>;
+                data.data().as_ptr()
+            }
+            _ => {
+                let scaled = self.apply_scaler_transform(data)?;
+                let ptr = scaled.data().as_ptr();
+                _scaled_data = Some(scaled);
+                ptr
+            }
+        };
         let mut out = Matrix::new(data.rows(), target_dims);
         let explained = pca_transform(
             self.inner,
-            scaled_data.data().as_ptr(),
+            data_ptr,
             data.rows() as FlucomaIndex,
             data.cols() as FlucomaIndex,
             out.data_mut().as_mut_ptr(),
@@ -259,7 +283,8 @@ impl Pca {
     /// # Errors
     /// Returns an error if the model is not fitted, or if
     /// `projected.cols() > fitted_dims`.
-    pub fn inverse_transform(&self, projected: &Matrix) -> Result<Matrix, &'static str> {
+    pub fn inverse_transform(&self, projected: impl AsMatrixView) -> Result<Matrix, &'static str> {
+        let projected = projected.as_matrix_view();
         let cols = self.dims.ok_or("PCA is not fitted")?;
         if projected.cols() > cols {
             return Err("projected_cols must be <= fitted dims");
@@ -287,7 +312,11 @@ impl Pca {
             cols as FlucomaIndex,
             self.config.whiten,
         );
-        self.apply_scaler_inverse_transform(&recon_scaled)
+        if matches!(self.fitted_scaler, Some(FittedScaler::None)) {
+            Ok(recon_scaled)
+        } else {
+            self.apply_scaler_inverse_transform(recon_scaled)
+        }
     }
 
     /// Return `true` if the model has been fitted at least once.
@@ -316,10 +345,10 @@ impl Pca {
 
     fn fit_scaler_and_transform(
         &self,
-        data: &Matrix,
+        data: MatrixView<'_>,
     ) -> Result<(Matrix, FittedScaler), &'static str> {
         match self.config.scaler {
-            PcaScaler::None => Ok((data.clone(), FittedScaler::None)),
+            PcaScaler::None => unreachable!("No scaling necessary"),
             PcaScaler::Normalize { min, max } => {
                 let mut n = Normalize::new(min, max)?;
                 let out = n.fit_transform(data)?;
@@ -341,21 +370,21 @@ impl Pca {
         }
     }
 
-    fn apply_scaler_transform(&self, data: &Matrix) -> Result<Matrix, &'static str> {
+    fn apply_scaler_transform(&self, data: MatrixView<'_>) -> Result<Matrix, &'static str> {
         match self.fitted_scaler.as_ref().ok_or("PCA is not fitted")? {
-            FittedScaler::None => Ok(data.clone()),
+            FittedScaler::None => unreachable!("No scaling necessary"),
             FittedScaler::Normalize(n) => n.transform(data),
             FittedScaler::Standardize(s) => s.transform(data),
             FittedScaler::RobustScale(r) => r.transform(data),
         }
     }
 
-    fn apply_scaler_inverse_transform(&self, data: &Matrix) -> Result<Matrix, &'static str> {
+    fn apply_scaler_inverse_transform(&self, data: Matrix) -> Result<Matrix, &'static str> {
         match self.fitted_scaler.as_ref().ok_or("PCA is not fitted")? {
-            FittedScaler::None => Ok(data.clone()),
-            FittedScaler::Normalize(n) => n.inverse_transform(data),
-            FittedScaler::Standardize(s) => s.inverse_transform(data),
-            FittedScaler::RobustScale(r) => r.inverse_transform(data),
+            FittedScaler::None => unreachable!("No scaling necessary"),
+            FittedScaler::Normalize(n) => n.inverse_transform(&data),
+            FittedScaler::Standardize(s) => s.inverse_transform(&data),
+            FittedScaler::RobustScale(r) => r.inverse_transform(&data),
         }
     }
 }

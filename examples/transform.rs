@@ -273,7 +273,7 @@ fn run_nmf_morph(
 
         // NMFFilter::process returns activations as n_frames × rank.
         // NMFMorph::init expects H as rank × n_frames — transpose it.
-        let h1_t = res1.activations.transpose();
+        let h1_t = res1.activations.transposed();
 
         morphers[channel].init(
             &res1.bases,
