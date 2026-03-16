@@ -10,7 +10,15 @@ keywords = ["audio", "flucoma", "spectral", "analysis", "dsp"]
 [dependencies]
 flucoma-sys = { version = "0.1.0", path = "./flucoma-sys" }
 num-complex = { version = "^0.4" }
+ndarray = { version = "0.17", optional = true }
+
+[features]
+ndarray = ["dep:ndarray"]
 
 [dev-dependencies]
 arg = { version = "^0.4", features = ["std"] }
 wav_io = { version = "^0.1" }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
