@@ -1,3 +1,4 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
 //! Safe Rust bindings for [FluCoMa](https://www.flucoma.org/) (Fluid Corpus Manipulation),
 //! a set of C++ audio analysis and transformation algorithms developed for creative
 //! music applications.
@@ -6,51 +7,6 @@
 //! covers spectral analysis, source separation, feature extraction, and event segmentation.
 //! This crate exposes those algorithms through idiomatic Rust wrappers with owned types,
 //! `Result`-based error handling, and no unsafe code in user-facing APIs.
-//!
-//! ## Examples
-//!
-//! ### Loudness
-//!
-//! ```rust,no_run
-//! use flucoma_rs::analyzation::Loudness;
-//!
-//! let mut analyzer = Loudness::new(1024, 44100.0).unwrap();
-//!
-//! let frame = vec![0.0f64; 1024]; // fill with audio samples
-//!
-//! let result = analyzer.process_frame(
-//!     &frame,
-//!     true, // k_weighting
-//!     true, // true_peak
-//! );
-//!
-//! println!("Loudness: {:.1} dBFS", result.loudness_db);
-//! println!("Peak:     {:.1} dBFS", result.peak_db);
-//! ```
-//!
-//! ### Onset Detection
-//!
-//!```rust,no_run
-//! use flucoma_rs::analyzation::{Onset, OnsetFunction};
-//!
-//! let window_size = 1024;
-//! let filter_size = 5;
-//! let mut odf = Onset::new(window_size, window_size, filter_size).unwrap();
-//!
-//! // Feed silent frame to seed history
-//! let silence = vec![0.0f64; window_size];
-//! let frame_delta = 0;
-//! let _ = odf.process_frame(
-//!   &silence, OnsetFunction::PowerSpectrum, filter_size, frame_delta);
-//!
-//! // Then feed a frame with audio
-//! let mut audio_frame = vec![0.0f64; window_size];
-//! audio_frame[512] = 1.0;
-//! let value = odf.process_frame(
-//!   &audio_frame, OnsetFunction::PowerSpectrum, filter_size, 0);
-//!
-//! println!("Onset value: {:.4}", value);
-//!```
 
 mod amp_feature;
 mod amp_seg;
@@ -85,6 +41,11 @@ mod transient_extraction;
 mod transient_seg;
 
 /// Low-level data processing, machine learning, and other shared data types.
+///
+/// # ndarray interop
+/// Enable the `ndarray` feature to pass [`ndarray::Array2<f64>`] directly to
+/// any algorithm that accepts [`AsMatrixView`](data::AsMatrixView) or [`AsMatrixViewMut`](data::AsMatrixViewMut),
+/// and to convert [`Matrix`](data::Matrix) results back to `ndarray::Array2` with `.into()`.
 pub mod data {
     pub use super::bufstats::{BufStats, BufStatsConfig};
     pub use super::dataset_query::{
@@ -93,7 +54,7 @@ pub mod data {
     pub use super::grid::Grid;
     pub use super::kdtree::KDTree;
     pub use super::kmeans::{KMeans, KMeansConfig, KMeansInit, KMeansResult, SKMeans};
-    pub use super::matrix::Matrix;
+    pub use super::matrix::{AsMatrixView, AsMatrixViewMut, Matrix, MatrixView, MatrixViewMut};
     pub use super::mds::{Mds, MdsDistance};
     pub use super::multi_stats::{
         MultiStats, MultiStatsConfig, MultiStatsOutput, MultiStatsValues,
@@ -103,6 +64,9 @@ pub mod data {
     pub use super::robust_scale::RobustScale;
     pub use super::running_stats::RunningStats;
     pub use super::standardize::Standardize;
+
+    #[cfg(feature = "ndarray")]
+    pub use ::ndarray;
 }
 
 /// STFT / ISTFT — convert audio frames to/from complex spectra.

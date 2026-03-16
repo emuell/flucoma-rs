@@ -1,4 +1,4 @@
-use crate::matrix::Matrix;
+use crate::matrix::{AsMatrixView, Matrix};
 use flucoma_sys::{mds_create, mds_destroy, mds_process, FlucomaIndex};
 
 // -------------------------------------------------------------------------------------------------
@@ -83,10 +83,11 @@ impl Mds {
     /// Returns an error if `target_dims` is out of range.
     pub fn project(
         &mut self,
-        data: &Matrix,
+        data: impl AsMatrixView,
         target_dims: usize,
         distance: MdsDistance,
     ) -> Result<Matrix, &'static str> {
+        let data = data.as_matrix_view();
         let rows = data.rows();
         let cols = data.cols();
 
