@@ -1,6 +1,6 @@
 use flucoma_sys::{nmf_create, nmf_destroy, nmf_process, nmf_process_frame};
 
-use crate::matrix::Matrix;
+use crate::matrix::{AsMatrixView, Matrix};
 
 // -------------------------------------------------------------------------------------------------
 
@@ -86,10 +86,11 @@ impl NMFFilter {
     pub fn process_frame<'a>(
         &'a mut self,
         magnitudes: &[f64],
-        bases: &Matrix,
+        bases: impl AsMatrixView,
         n_iterations: usize,
         random_seed: i64,
     ) -> (&'a [f64], &'a [f64]) {
+        let bases = bases.as_matrix_view();
         assert_eq!(
             magnitudes.len(),
             self.n_bins,
@@ -148,11 +149,12 @@ impl NMFFilter {
     /// Panics if `rank == 0`.
     pub fn process(
         &mut self,
-        spectrogram: &Matrix,
+        spectrogram: impl AsMatrixView,
         rank: usize,
         n_iterations: usize,
         random_seed: i64,
     ) -> NmfResult {
+        let spectrogram = spectrogram.as_matrix_view();
         assert!(rank > 0, "rank must be > 0");
         assert_eq!(
             spectrogram.cols(),

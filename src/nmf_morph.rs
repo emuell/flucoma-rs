@@ -2,7 +2,7 @@ use num_complex::Complex64 as Complex;
 
 use flucoma_sys::{nmf_morph_create, nmf_morph_destroy, nmf_morph_init, nmf_morph_process_frame};
 
-use crate::matrix::Matrix;
+use crate::matrix::{AsMatrixView, Matrix};
 
 // -------------------------------------------------------------------------------------------------
 
@@ -87,14 +87,17 @@ impl NMFMorph {
     #[allow(clippy::too_many_arguments)]
     pub fn init(
         &mut self,
-        w1: &Matrix,
-        w2: &Matrix,
-        h: &Matrix,
+        w1: impl AsMatrixView,
+        w2: impl AsMatrixView,
+        h: impl AsMatrixView,
         window_size: usize,
         fft_size: usize,
         hop_size: usize,
         assign: bool,
     ) -> Result<(), &'static str> {
+        let w1 = w1.as_matrix_view();
+        let w2 = w2.as_matrix_view();
+        let h = h.as_matrix_view();
         if w1.rows() != w2.rows() {
             return Err("w1 and w2 must have the same number of rows (rank)");
         }
@@ -138,9 +141,9 @@ impl NMFMorph {
         );
         self.num_bins = fft_size / 2 + 1;
         self.buf = vec![Complex::default(); self.num_bins];
-        self.w1 = Some(w1.clone());
-        self.w2 = Some(w2.clone());
-        self.h = Some(h.clone());
+        self.w1 = Some(w1.to_owned());
+        self.w2 = Some(w2.to_owned());
+        self.h = Some(h.to_owned());
         self.window_size = window_size;
         self.fft_size = fft_size;
         self.hop_size = hop_size;
@@ -225,6 +228,7 @@ impl Drop for NMFMorph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::matrix::Matrix;
 
     fn make_identity_bases(rank: usize, n_bins: usize) -> Matrix {
         let mut data = vec![0.0f64; rank * n_bins];
