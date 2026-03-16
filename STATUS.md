@@ -38,22 +38,23 @@
 
 ### Machine Learning & Statistics (`flucoma_rs::data`)
 
-- [X] [`MultiStats`](https://learn.flucoma.org/reference/stats) -- aggregate statistics (mean, std, min, max, ...) over a descriptor buffer
-- [X] [`RunningStats`](https://learn.flucoma.org/reference/stats) -- incremental running statistics
-- [X] [`BufStats`](https://learn.flucoma.org/reference/stats) -- statistics over a selected region of a multichannel buffer
-- [X] [`Normalization`](https://learn.flucoma.org/reference/normalize) -- min-max feature normalization
-- [X] [`Standardization`](https://learn.flucoma.org/reference/standardize) -- Z-score standardization
-- [X] [`RobustScaling`](https://learn.flucoma.org/reference/robustscale) -- robust (median/IQR) feature scaling
+- [X] [`MultiStats`](https://learn.flucoma.org/reference/stats) as `flucoma_rs::data::MultiStats` -- aggregate statistics (mean, std, min, max, ...) over a descriptor buffer
+- [X] [`RunningStats`](https://learn.flucoma.org/reference/stats) as `flucoma_rs::data::RunningStats` -- incremental running statistics
+- [X] [`BufStats`](https://learn.flucoma.org/reference/stats) as `flucoma_rs::data::BufStats` -- statistics over a selected region of a multichannel buffer
+- [X] [`Normalization`](https://learn.flucoma.org/reference/normalize) as `flucoma_rs::data::Normalize` -- min-max feature normalization
+- [X] [`Standardization`](https://learn.flucoma.org/reference/standardize) as `flucoma_rs::data::Standardize` -- Z-score standardization
+- [X] [`RobustScaling`](https://learn.flucoma.org/reference/robustscale) as `flucoma_rs::data::RobustScale` -- robust (median/IQR) feature scaling
 - [ ] [`LabelSetEncoder`](https://learn.flucoma.org/reference/labelset) -- categorical label encoder
-- [ ] [`KDTree`](https://learn.flucoma.org/reference/kdtree) -- K-D Tree for nearest-neighbour search
-- [ ] [`KMeans`](https://learn.flucoma.org/reference/kmeans) -- K-Means clustering
-- [ ] [`SKMeans`](https://learn.flucoma.org/reference/skmeans) -- Spherical K-Means clustering
+- [X] [`Grid`](https://learn.flucoma.org/reference/kdtree) as `flucoma_rs::data::Grid` -- Redistribute a 2D point set onto a regular grid
+- [X] [`KDTree`](https://learn.flucoma.org/reference/kdtree) as `flucoma_rs::data::KDTree` -- K-D Tree for nearest-neighbour search
+- [X] [`KMeans`](https://learn.flucoma.org/reference/kmeans)  as `flucoma_rs::data::KMeans` -- K-Means clustering
+- [X] [`SKMeans`](https://learn.flucoma.org/reference/skmeans) as `flucoma_rs::data::SKMeans` -- Spherical K-Means clustering
 - [ ] [`KNNClassifier`](https://learn.flucoma.org/reference/knnclassifier) -- K-Nearest Neighbour classifier
 - [ ] [`KNNRegressor`](https://learn.flucoma.org/reference/knnregressor) -- K-Nearest Neighbour regressor
 - [ ] [`MLP`](https://learn.flucoma.org/reference/mlpclassifier) -- Multi-Layer Perceptron
 - [ ] [`SGD`](https://learn.flucoma.org/reference/mlpclassifier) -- Stochastic Gradient Descent optimiser (used by MLP)
-- [X] [`PCA`](https://learn.flucoma.org/reference/pca) -- Principal Component Analysis
-- [ ] [`MDS`](https://learn.flucoma.org/reference/mds) -- Multidimensional Scaling
+- [X] [`PCA`](https://learn.flucoma.org/reference/pca) as `flucoma_rs::data::PCA` -- Principal Component Analysis
+- [X] [`MDS`](https://learn.flucoma.org/reference/mds) as `flucoma_rs::data::MDS` -- Multidimensional Scaling
 - [ ] [`UMAP`](https://learn.flucoma.org/reference/umap) -- UMAP dimensionality reduction
 
 ### Fourier Transform (`flucoma_rs::fourier`)
