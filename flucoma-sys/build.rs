@@ -26,12 +26,12 @@ fn main() {
         .define("BUILD_EXAMPLES", "OFF")
         .define("FLUCOMA_TESTS", "OFF")
         .define("FMT_INSTALL", "OFF")
-        // Use /MT (static CRT) -- flucoma-core hardcodes this in its CMakeLists.txt
+        // Use a msvc runtime library which is compatible with default Rust compiler settings
         .define(
             "CMAKE_MSVC_RUNTIME_LIBRARY",
-            "MultiThreaded$<$<CONFIG:Debug>:Debug>",
+            "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
         )
-        // Enable C++ exception handling for msvc (required by foonathan/memory)
+        // C++ exception handling (required by foonathan/memory)
         .cxxflag(if cfg!(target_env = "msvc") {
             "/EHsc"
         } else {
@@ -78,7 +78,7 @@ fn main() {
     let mut build = cc::Build::new();
     build
         .cpp(true)
-        .static_crt(true) // see above /MT
+        .static_crt(false) // match flucoma-core settings
         .include(flucoma_dir.join("include"))
         .include(&eigen_include)
         .include(&hiss_include)
@@ -90,13 +90,13 @@ fn main() {
         .define("EIGEN_MPL2_ONLY", "1")
         .define("FMT_HEADER_ONLY", "1")
         .define("NOMINMAX", None)
-        .define("_USE_MATH_DEFINES", None)
-        .flag_if_supported("-Wno-unused");
-
+        .define("_USE_MATH_DEFINES", None);
     if cfg!(target_env = "msvc") {
+        // See flucoma cmake configure settings above
         build.flag("/EHsc").flag("/bigobj");
+    } else {
+        build.flag("-fpermissive").flag("-Wno-unused");
     }
-    build.flag_if_supported("-fpermissive");
 
     // NB: add -std=c++17 via flag_if_supported to avoid that cpp_build appends a -std=c++11
     let mut config: cpp_build::Config = build.clone().into();
