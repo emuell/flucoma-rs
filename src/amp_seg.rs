@@ -14,6 +14,8 @@ use flucoma_sys::{amp_seg_create, amp_seg_destroy, amp_seg_init, amp_seg_process
 /// See <https://learn.flucoma.org/reference/ampslice>
 pub struct AmpSlice {
     inner: *mut u8,
+    floor: f64,
+    hi_pass_freq: f64,
 }
 
 unsafe impl Send for AmpSlice {}
@@ -33,7 +35,11 @@ impl AmpSlice {
             return Err("failed to create AmpSlice instance");
         }
         amp_seg_init(inner, floor, hi_pass_freq);
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            floor,
+            hi_pass_freq,
+        })
     }
 
     /// Process a single audio sample.
@@ -51,6 +57,11 @@ impl AmpSlice {
     /// * `debounce`      - Minimum samples between successive onsets.
     ///
     /// Returns 1.0 on an onset event, 0.0 otherwise.
+    /// Reset internal envelope and debounce state without reallocating.
+    pub fn reset(&mut self) {
+        amp_seg_init(self.inner, self.floor, self.hi_pass_freq);
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub fn process_sample(
         &mut self,
@@ -100,6 +111,19 @@ mod tests {
             let val = slice.process_sample(0.0, -30.0, -40.0, -60.0, 10, 100, 10, 100, 20.0, 10);
             assert_eq!(val, 0.0, "silence should produce 0.0, got {val}");
         }
+    }
+
+    #[test]
+    fn amp_slice_reset_clears_state() {
+        let mut slice = AmpSlice::new(-60.0, 0.0).unwrap();
+        let first = slice.process_sample(0.0, -10.0, -40.0, -60.0, 10, 100, 10, 100, 0.0, 10);
+        // Dirty the state
+        for _ in 0..50 {
+            slice.process_sample(1.0, -10.0, -40.0, -60.0, 10, 100, 10, 100, 0.0, 10);
+        }
+        slice.reset();
+        let after = slice.process_sample(0.0, -10.0, -40.0, -60.0, 10, 100, 10, 100, 0.0, 10);
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

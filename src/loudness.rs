@@ -19,6 +19,7 @@ pub struct LoudnessResult {
 pub struct Loudness {
     inner: *mut u8,
     frame_size: usize,
+    sample_rate: f64,
 }
 
 unsafe impl Send for Loudness {}
@@ -44,7 +45,16 @@ impl Loudness {
             return Err("failed to create Loudness instance");
         }
         loudness_init(inner, frame_size as isize, sample_rate);
-        Ok(Self { inner, frame_size })
+        Ok(Self {
+            inner,
+            frame_size,
+            sample_rate,
+        })
+    }
+
+    /// Reset internal K-weighting filter and true peak state without reallocating.
+    pub fn reset(&mut self) {
+        loudness_init(self.inner, self.frame_size as isize, self.sample_rate);
     }
 
     /// Process a single audio frame.
@@ -111,6 +121,31 @@ mod tests {
         // Silence produces a very low (negative) loudness value
         assert!(r.loudness_db < -60.0, "loudness_db = {}", r.loudness_db);
         assert!(r.peak_db < -60.0, "peak_db = {}", r.peak_db);
+    }
+
+    #[test]
+    fn loudness_reset_clears_filter_state() {
+        let n = 1024usize;
+        let mut l = Loudness::new(n, 44100.0).unwrap();
+        let silence = vec![0.0f64; n];
+        let first = l.process_frame(&silence, true, true);
+        // Feed a non-silent frame to dirty the filter state
+        use std::f64::consts::PI;
+        let sine: Vec<f64> = (0..n)
+            .map(|i| (2.0 * PI * 440.0 * i as f64 / 44100.0).sin())
+            .collect();
+        l.process_frame(&sine, true, true);
+        // After reset the first silence frame should match the original
+        l.reset();
+        let after = l.process_frame(&silence, true, true);
+        assert_eq!(
+            first.loudness_db, after.loudness_db,
+            "reset should restore loudness to initial state"
+        );
+        assert_eq!(
+            first.peak_db, after.peak_db,
+            "reset should restore peak to initial state"
+        );
     }
 
     #[test]

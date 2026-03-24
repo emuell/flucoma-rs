@@ -17,6 +17,8 @@ use flucoma_sys::{
 /// See <https://learn.flucoma.org/reference/ampfeature>
 pub struct AmpFeature {
     inner: *mut u8,
+    floor: f64,
+    hi_pass_freq: f64,
 }
 
 unsafe impl Send for AmpFeature {}
@@ -39,7 +41,16 @@ impl AmpFeature {
             return Err("failed to create AmpFeature instance");
         }
         amp_feature_init(inner, floor, hi_pass_freq);
-        Ok(Self { inner })
+        Ok(Self {
+            inner,
+            floor,
+            hi_pass_freq,
+        })
+    }
+
+    /// Reset internal hi-pass filter and envelope follower state without reallocating.
+    pub fn reset(&mut self) {
+        amp_feature_init(self.inner, self.floor, self.hi_pass_freq);
     }
 
     /// Process one audio sample and return the envelope value.
@@ -102,6 +113,19 @@ mod tests {
             val.is_finite(),
             "expected finite value for silence, got {val}"
         );
+    }
+
+    #[test]
+    fn amp_feature_reset_clears_envelope_state() {
+        let mut af = AmpFeature::new(-60.0, 0.0).unwrap();
+        let first = af.process_sample(0.0, -60.0, 10, 100, 10, 100, 0.0);
+        // Warm up / dirty envelope state
+        for _ in 0..50 {
+            af.process_sample(1.0, -60.0, 10, 100, 10, 100, 0.0);
+        }
+        af.reset();
+        let after = af.process_sample(0.0, -60.0, 10, 100, 10, 100, 0.0);
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

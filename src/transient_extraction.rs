@@ -25,6 +25,9 @@ pub struct TransientExtraction {
     inner: *mut u8,
     hop_size: usize,
     input_size: usize,
+    order: usize,
+    block_size: usize,
+    pad_size: usize,
     /// Output buffer: [transients | residual], each hop_size long.
     buf: Vec<f64>,
 }
@@ -70,8 +73,21 @@ impl TransientExtraction {
             inner,
             hop_size,
             input_size,
+            order,
+            block_size,
+            pad_size,
             buf: vec![0.0f64; 2 * hop_size],
         })
+    }
+
+    /// Reset the AR model and stream buffers without reallocating.
+    pub fn reset(&mut self) {
+        transient_ext_init(
+            self.inner,
+            self.order as isize,
+            self.block_size as isize,
+            self.pad_size as isize,
+        );
     }
 
     /// Configure detection sensitivity.
@@ -166,6 +182,24 @@ mod tests {
         for &v in residual {
             assert!(v.is_finite(), "residual output must be finite, got {v}");
         }
+    }
+
+    #[test]
+    fn transient_ext_reset_clears_ar_state() {
+        let mut ext = TransientExtraction::new(20, 256, 128).unwrap();
+        let silence = vec![0.0f64; ext.input_size()];
+        let (t, r) = ext.process(&silence);
+        let first: Vec<_> = t.iter().chain(r).copied().collect();
+        // Advance AR model state
+        let mut impulse = vec![0.0f64; ext.input_size()];
+        impulse[0] = 1.0;
+        for _ in 0..5 {
+            ext.process(&impulse);
+        }
+        ext.reset();
+        let (t2, r2) = ext.process(&silence);
+        let after: Vec<_> = t2.iter().chain(r2).copied().collect();
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

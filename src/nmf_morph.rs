@@ -25,6 +25,13 @@ pub struct NMFMorph {
     max_fft_size: usize,
     num_bins: usize,
     buf: Vec<Complex>,
+    w1: Option<Matrix>,
+    w2: Option<Matrix>,
+    h: Option<Matrix>,
+    window_size: usize,
+    fft_size: usize,
+    hop_size: usize,
+    assign: bool,
 }
 
 unsafe impl Send for NMFMorph {}
@@ -47,6 +54,13 @@ impl NMFMorph {
             max_fft_size,
             num_bins: 0,
             buf: Vec::new(),
+            w1: None,
+            w2: None,
+            h: None,
+            window_size: 0,
+            fft_size: 0,
+            hop_size: 0,
+            assign: false,
         })
     }
 
@@ -124,7 +138,44 @@ impl NMFMorph {
         );
         self.num_bins = fft_size / 2 + 1;
         self.buf = vec![Complex::default(); self.num_bins];
+        self.w1 = Some(w1.clone());
+        self.w2 = Some(w2.clone());
+        self.h = Some(h.clone());
+        self.window_size = window_size;
+        self.fft_size = fft_size;
+        self.hop_size = hop_size;
+        self.assign = assign;
         Ok(())
+    }
+
+    /// Reset the frame counter and RTPGHI phase state without reallocating.
+    /// Equivalent to re-calling `init` with the same matrices and parameters.
+    ///
+    /// # Panics
+    /// Panics if `init` has not been called yet.
+    pub fn reset(&mut self) {
+        let w1 = self
+            .w1
+            .as_ref()
+            .expect("NMFMorph::init must be called before reset");
+        let w2 = self.w2.as_ref().unwrap();
+        let h = self.h.as_ref().unwrap();
+        nmf_morph_init(
+            self.inner,
+            w1.data().as_ptr(),
+            w1.rows() as isize,
+            w1.cols() as isize,
+            w2.data().as_ptr(),
+            w2.rows() as isize,
+            w2.cols() as isize,
+            h.data().as_ptr(),
+            h.rows() as isize,
+            h.cols() as isize,
+            self.window_size as isize,
+            self.fft_size as isize,
+            self.hop_size as isize,
+            self.assign,
+        );
     }
 
     /// Generate one morphed complex-spectrum frame.
@@ -213,6 +264,35 @@ mod tests {
                 "output must be finite, got {c}"
             );
         }
+    }
+
+    #[test]
+    fn nmf_morph_reset_restarts_frame_counter() {
+        let fft_size = 512usize;
+        let n_bins = fft_size / 2 + 1;
+        let rank = 2usize;
+        let n_frames = 4usize;
+
+        let mut m = NMFMorph::new(fft_size).unwrap();
+        let w = make_identity_bases(rank, n_bins);
+        let h = Matrix::from_vec(vec![1.0f64; rank * n_frames], rank, n_frames).unwrap();
+        m.init(&w, &w, &h, fft_size, fft_size, 256, false).unwrap();
+
+        // Collect first frame output before advancing.
+        let first: Vec<_> = m.process_frame(0.5, 0).to_vec();
+
+        // Advance a few more frames to move the internal position counter.
+        for _ in 0..3 {
+            m.process_frame(0.5, 0);
+        }
+
+        // After reset the frame counter returns to 0; output should match `first`.
+        m.reset();
+        let after_reset: Vec<_> = m.process_frame(0.5, 0).to_vec();
+        assert_eq!(
+            first, after_reset,
+            "reset should restore output to initial state"
+        );
     }
 
     #[test]

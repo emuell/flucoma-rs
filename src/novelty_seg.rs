@@ -18,6 +18,8 @@ use flucoma_sys::{
 pub struct NoveltySlice {
     inner: *mut u8,
     n_dims: usize,
+    kernel_size: usize,
+    filter_size: usize,
 }
 
 unsafe impl Send for NoveltySlice {}
@@ -57,7 +59,22 @@ impl NoveltySlice {
             filter_size as isize,
             n_dims as isize,
         );
-        Ok(Self { inner, n_dims })
+        Ok(Self {
+            inner,
+            n_dims,
+            kernel_size,
+            filter_size,
+        })
+    }
+
+    /// Reset internal peak buffer and debounce counter without reallocating.
+    pub fn reset(&mut self) {
+        novelty_seg_init(
+            self.inner,
+            self.kernel_size as isize,
+            self.filter_size as isize,
+            self.n_dims as isize,
+        );
     }
 
     /// Process one feature frame.
@@ -112,6 +129,22 @@ mod tests {
         let frame = vec![0.0f64; 13];
         let val = slice.process_frame(&frame, 0.5, 2);
         assert!(val == 0.0 || val == 1.0, "expected 0.0 or 1.0, got {val}");
+    }
+
+    #[test]
+    fn novelty_seg_reset_clears_history() {
+        const N_DIMS: usize = 13;
+        let mut slice = NoveltySlice::new(3, N_DIMS, 1).unwrap();
+        let frame = vec![0.0f64; N_DIMS];
+        let first = slice.process_frame(&frame, 0.5, 2);
+        // Advance state
+        let loud: Vec<f64> = (0..N_DIMS).map(|i| i as f64 * 0.1).collect();
+        for _ in 0..10 {
+            slice.process_frame(&loud, 0.5, 2);
+        }
+        slice.reset();
+        let after = slice.process_frame(&frame, 0.5, 2);
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

@@ -46,6 +46,7 @@ pub struct Onset {
     inner: *mut u8,
     window_size: usize,
     fft_size: usize,
+    filter_size: usize,
     max_filter_size: usize,
 }
 
@@ -88,8 +89,19 @@ impl Onset {
             inner,
             window_size,
             fft_size,
+            filter_size,
             max_filter_size: max_filter,
         })
+    }
+
+    /// Reset internal frame history and median filter without reallocating.
+    pub fn reset(&mut self) {
+        onset_init(
+            self.inner,
+            self.window_size as isize,
+            self.fft_size as isize,
+            self.filter_size as isize,
+        );
     }
 
     /// Process one audio frame and return an onset detection value.
@@ -171,6 +183,21 @@ mod tests {
             "expected small value for silence, got {}",
             val
         );
+    }
+
+    #[test]
+    fn onset_reset_clears_history() {
+        let mut odf = Onset::new(1024, 1024, 0).unwrap();
+        let silence = vec![0.0f64; 1024];
+        let first = odf.process_frame(&silence, OnsetFunction::PowerSpectrum, 0, 0);
+        // Advance state
+        let mut impulse = vec![0.0f64; 1024];
+        impulse[512] = 1.0;
+        odf.process_frame(&impulse, OnsetFunction::PowerSpectrum, 0, 0);
+        // After reset the first frame should match the original first output
+        odf.reset();
+        let after = odf.process_frame(&silence, OnsetFunction::PowerSpectrum, 0, 0);
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

@@ -63,6 +63,9 @@ impl Default for SineExtractionParams {
 pub struct SineExtraction {
     inner: *mut u8,
     n_bins: usize,
+    window_size: usize,
+    fft_size: usize,
+    transform_size: usize,
     /// Interleaved FFI output buffer, shape (n_bins, 2) complex values.
     ffi_buf: Vec<Complex64>,
     /// Deinterleaved output: [sines | residual], each n_bins long.
@@ -113,9 +116,22 @@ impl SineExtraction {
         Ok(Self {
             inner,
             n_bins,
+            window_size,
+            fft_size,
+            transform_size,
             ffi_buf: vec![Complex64::default(); n_bins * 2],
             out_buf: vec![Complex64::default(); n_bins * 2],
         })
+    }
+
+    /// Reset internal frame queue and partial tracker without reallocating.
+    pub fn reset(&mut self) {
+        sine_ext_init(
+            self.inner,
+            self.window_size as isize,
+            self.fft_size as isize,
+            self.transform_size as isize,
+        );
     }
 
     /// Process one complex spectral frame.
@@ -205,6 +221,27 @@ mod tests {
                 "output must be finite, got {v}"
             );
         }
+    }
+
+    #[test]
+    fn sine_ext_reset_clears_tracker() {
+        let fft = 512usize;
+        let mut se = SineExtraction::new(fft, fft, fft).unwrap();
+        let n_bins = se.n_bins();
+        let input = vec![Complex64::new(0.01, 0.0); n_bins];
+        let params = SineExtractionParams::default();
+
+        let (s, r) = se.process_frame(&input, &params);
+        let first: Vec<_> = s.iter().chain(r).copied().collect();
+
+        for _ in 0..10 {
+            se.process_frame(&input, &params);
+        }
+
+        se.reset();
+        let (s2, r2) = se.process_frame(&input, &params);
+        let after: Vec<_> = s2.iter().chain(r2).copied().collect();
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

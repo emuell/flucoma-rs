@@ -18,6 +18,8 @@ use flucoma_sys::{
 pub struct Novelty {
     inner: *mut u8,
     n_dims: usize,
+    kernel_size: usize,
+    filter_size: usize,
 }
 
 unsafe impl Send for Novelty {}
@@ -58,7 +60,22 @@ impl Novelty {
             filter_size as isize,
             n_dims as isize,
         );
-        Ok(Self { inner, n_dims })
+        Ok(Self {
+            inner,
+            n_dims,
+            kernel_size,
+            filter_size,
+        })
+    }
+
+    /// Reset internal history and median filter without reallocating.
+    pub fn reset(&mut self) {
+        novelty_feature_init(
+            self.inner,
+            self.kernel_size as isize,
+            self.filter_size as isize,
+            self.n_dims as isize,
+        );
     }
 
     /// Process one feature frame and return the novelty value.
@@ -108,6 +125,22 @@ mod tests {
             val.is_finite(),
             "expected finite value for zero input, got {val}"
         );
+    }
+
+    #[test]
+    fn novelty_feature_reset_clears_history() {
+        const N_DIMS: usize = 13;
+        let mut nf = Novelty::new(3, N_DIMS, 1).unwrap();
+        let frame = vec![0.0f64; N_DIMS];
+        let first = nf.process_frame(&frame);
+        // Advance state with varying input
+        let loud: Vec<f64> = (0..N_DIMS).map(|i| i as f64 * 0.1).collect();
+        for _ in 0..10 {
+            nf.process_frame(&loud);
+        }
+        nf.reset();
+        let after = nf.process_frame(&frame);
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

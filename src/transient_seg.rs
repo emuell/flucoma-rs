@@ -21,6 +21,9 @@ pub struct TransientSlice {
     inner: *mut u8,
     hop_size: usize,
     input_size: usize,
+    order: usize,
+    block_size: usize,
+    pad_size: usize,
 }
 
 unsafe impl Send for TransientSlice {}
@@ -64,7 +67,20 @@ impl TransientSlice {
             inner,
             hop_size,
             input_size,
+            order,
+            block_size,
+            pad_size,
         })
+    }
+
+    /// Reset the AR model and detection state without reallocating.
+    pub fn reset(&mut self) {
+        transient_seg_init(
+            self.inner,
+            self.order as isize,
+            self.block_size as isize,
+            self.pad_size as isize,
+        );
     }
 
     /// Configure detection sensitivity.
@@ -160,6 +176,22 @@ mod tests {
                 "sample {i}: expected 0.0 or 1.0, got {v}"
             );
         }
+    }
+
+    #[test]
+    fn transient_seg_reset_clears_ar_state() {
+        let mut slice = TransientSlice::new(20, 256, 128).unwrap();
+        let silence = vec![0.0f64; slice.input_size()];
+        let first = slice.process(&silence);
+        // Advance AR model state
+        let mut impulse = vec![0.0f64; slice.input_size()];
+        impulse[0] = 1.0;
+        for _ in 0..5 {
+            slice.process(&impulse);
+        }
+        slice.reset();
+        let after = slice.process(&silence);
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

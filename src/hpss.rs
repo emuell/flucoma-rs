@@ -127,6 +127,12 @@ impl Hpss {
         })
     }
 
+    /// Reset internal median-filter history without reallocating.
+    /// Safe to call between separate separation operations with the same parameters.
+    pub fn reset(&mut self) {
+        hpss_init(self.inner, self.n_bins as isize, self.h_size as isize);
+    }
+
     /// Process one complex spectral frame.
     ///
     /// # Arguments
@@ -243,6 +249,26 @@ mod tests {
         assert_eq!(h.len(), n_bins);
         assert_eq!(p.len(), n_bins);
         assert_eq!(r.len(), n_bins);
+    }
+
+    #[test]
+    fn hpss_reset_restarts_history() {
+        let fft_size = 512usize;
+        let mut hpss = Hpss::new(fft_size, 9, 9).unwrap();
+        let n_bins = hpss.n_bins();
+        let input = vec![Complex64::new(0.5, 0.1); n_bins];
+
+        let (h, p, r) = hpss.process_frame(&input, &HpssParams::default());
+        let first: Vec<_> = h.iter().chain(p).chain(r).copied().collect();
+
+        for _ in 0..5 {
+            hpss.process_frame(&input, &HpssParams::default());
+        }
+
+        hpss.reset();
+        let (h2, p2, r2) = hpss.process_frame(&input, &HpssParams::default());
+        let after: Vec<_> = h2.iter().chain(p2).chain(r2).copied().collect();
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

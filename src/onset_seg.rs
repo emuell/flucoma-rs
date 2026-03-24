@@ -19,6 +19,7 @@ pub struct OnsetSlice {
     inner: *mut u8,
     window_size: usize,
     fft_size: usize,
+    filter_size: usize,
     max_filter_size: usize,
 }
 
@@ -61,8 +62,19 @@ impl OnsetSlice {
             inner,
             window_size,
             fft_size,
+            filter_size,
             max_filter_size: max_filter,
         })
+    }
+
+    /// Reset internal frame history, ODF state, and debounce counter without reallocating.
+    pub fn reset(&mut self) {
+        onset_seg_init(
+            self.inner,
+            self.window_size as isize,
+            self.fft_size as isize,
+            self.filter_size as isize,
+        );
     }
 
     /// Process one audio frame.
@@ -143,6 +155,21 @@ mod tests {
         let silence = vec![0.0f64; 1024];
         let val = slice.process_frame(&silence, OnsetFunction::PowerSpectrum, 5, 0.5, 0, 0);
         assert_eq!(val, 0.0, "silence should not trigger an onset, got {val}");
+    }
+
+    #[test]
+    fn onset_seg_reset_clears_history() {
+        let mut slice = OnsetSlice::new(1024, 1024, 0).unwrap();
+        let silence = vec![0.0f64; 1024];
+        let first = slice.process_frame(&silence, OnsetFunction::PowerSpectrum, 0, 0.5, 0, 0);
+        // Advance state with an impulse
+        let mut impulse = vec![0.0f64; 1024];
+        impulse[512] = 1.0;
+        slice.process_frame(&impulse, OnsetFunction::PowerSpectrum, 0, 0.5, 0, 0);
+        // After reset, first silence frame should match original
+        slice.reset();
+        let after = slice.process_frame(&silence, OnsetFunction::PowerSpectrum, 0, 0.5, 0, 0);
+        assert_eq!(first, after, "reset should restore output to initial state");
     }
 
     #[test]

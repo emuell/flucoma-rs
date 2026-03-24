@@ -65,6 +65,17 @@ impl AudioTransport {
         })
     }
 
+    /// Reset internal state (phase, window) without reallocating.
+    /// Safe to call between morph operations with the same parameters.
+    pub fn reset(&mut self) {
+        audio_transport_init(
+            self.inner,
+            self.window_size as isize,
+            self.fft_size as isize,
+            self.hop_size as isize,
+        );
+    }
+
     /// Interpolate between two audio frames using optimal transport.
     ///
     /// # Arguments
