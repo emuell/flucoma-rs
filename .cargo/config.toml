@@ -1,4 +1,0 @@
-# On MSVC, use the static C runtime (/MT) to match flucoma-core's cmake build,
-# which hardcodes CMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded.
-[target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "target-feature=+crt-static"]
