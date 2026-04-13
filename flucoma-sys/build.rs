@@ -18,26 +18,29 @@ fn main() {
 
     // -- cmake configure + build ALL_BUILD
 
-    let cmake_out = cmake::Config::new(&flucoma_dir)
+    let mut cmake_config = cmake::Config::new(&flucoma_dir);
+    cmake_config
         .profile(profile)
         .define("FOONATHAN_MEMORY_BUILD_TOOLS", "OFF")
         .define("FOONATHAN_MEMORY_BUILD_EXAMPLES", "OFF")
         .define("FOONATHAN_MEMORY_BUILD_TESTS", "OFF")
         .define("BUILD_EXAMPLES", "OFF")
         .define("FLUCOMA_TESTS", "OFF")
-        .define("FMT_INSTALL", "OFF")
-        // Use a msvc runtime library which is compatible with default Rust compiler settings
-        .define(
+        .define("FMT_INSTALL", "OFF");
+    if cfg!(target_env = "msvc") {
+        cmake_config.define(
+            // Use a msvc runtime library which is compatible with default Rust compiler settings
             "CMAKE_MSVC_RUNTIME_LIBRARY",
             "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL",
-        )
-        // C++ exception handling (required by foonathan/memory)
-        .cxxflag(if cfg!(target_env = "msvc") {
-            "/EHsc"
-        } else {
-            ""
-        })
-        .build();
+        );
+        // Enable C++ exception handling (required by foonathan/memory)
+        cmake_config.cxxflag("/EHsc");
+    } else {
+        // Disable all warnings
+        cmake_config.cxxflag("-w");
+    }
+
+    let cmake_out = cmake_config.build();
 
     let cmake_build = cmake_out.join("build");
     let deps_dir = cmake_build.join("_deps");
@@ -92,10 +95,11 @@ fn main() {
         .define("NOMINMAX", None)
         .define("_USE_MATH_DEFINES", None);
     if cfg!(target_env = "msvc") {
-        // See flucoma cmake configure settings above
+        // Enable C++ exception handling (required by foonathan/memory)
         build.flag("/EHsc").flag("/bigobj");
     } else {
-        build.flag("-fpermissive").flag("-Wno-unused");
+        // Ignore all warnings
+        build.flag("-fpermissive").flag("-w");
     }
 
     // NB: add -std=c++17 via flag_if_supported to avoid that cpp_build appends a -std=c++11
