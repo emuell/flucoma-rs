@@ -222,8 +222,8 @@ fn fill_frame(frame: &mut [f64], samples: &[f64], start: usize) {
     if end <= samples.len() {
         frame.copy_from_slice(&samples[start..end]);
     } else {
-        for i in 0..frame.len() {
-            frame[i] = samples.get(start + i).copied().unwrap_or(0.0);
+        for (i, sample) in frame.iter_mut().enumerate() {
+            *sample = samples.get(start + i).copied().unwrap_or(0.0);
         }
     }
 }
