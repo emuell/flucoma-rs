@@ -14,6 +14,8 @@ This is a work in progress.
 
 See [STATUS.md](./STATUS.md) for which functions are wrapped and which are not.
 
+Note that FluCoMa ML and Statistics functions are not wrapped on purpose. There are various great Rust native libs out there which can be used in combination with the existing wrapped FluCoMa tools. 
+
 ## Contributing
 
 See [EXTEND.md](./EXTEND.md) on how to create new wrappers. Pull requests are welcome!
