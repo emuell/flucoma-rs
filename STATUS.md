@@ -11,9 +11,9 @@
 - [ ] [`MFCC`](https://learn.flucoma.org/reference/mfcc) -- mel-frequency cepstral coefficients
 - [ ] [`SpectralShape`](https://learn.flucoma.org/reference/spectralshape) -- 7 shape descriptors: centroid, spread, skewness, kurtosis, rolloff, flatness, crest
 - [ ] [`ChromaFilterBank`](https://learn.flucoma.org/reference/chroma) -- chroma (pitch-class) filter bank
-- [ ] [`YINFFT`](https://learn.flucoma.org/reference/pitch) -- YIN pitch estimator (spectral domain)
-- [ ] [`CepstrumF0`](https://learn.flucoma.org/reference/pitch) -- cepstral fundamental frequency estimator
-- [ ] [`HPS`](https://learn.flucoma.org/reference/pitch) -- Harmonic Product Spectrum pitch estimator
+- [x] [`YINFFT`](https://learn.flucoma.org/reference/pitch) as `flucoma_rs::analyzation::YinFft` -- YIN pitch estimator (spectral domain)
+- [x] [`CepstrumF0`](https://learn.flucoma.org/reference/pitch) as `flucoma_rs::analyzation::CepstrumF0` -- cepstral fundamental frequency estimator
+- [x] [`HPS`](https://learn.flucoma.org/reference/pitch) as `flucoma_rs::analyzation::Hps` -- Harmonic Product Spectrum pitch estimator
 
 ### Audio source separation (`flucoma_rs::decomposition`)
 
