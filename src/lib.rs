@@ -57,6 +57,8 @@
 mod amp_feature;
 mod amp_seg;
 mod audio_transport;
+mod cepstrum_f0;
+mod hps;
 mod hpss;
 mod loudness;
 mod matrix;
@@ -73,6 +75,7 @@ mod sine_extraction;
 mod stft;
 mod transient_extraction;
 mod transient_seg;
+mod yin_fft;
 
 /// Core matrix types and traits used throughout the FluCoMa algorithms.
 ///
@@ -93,14 +96,17 @@ pub mod fourier {
     pub use num_complex::Complex64 as Complex;
 }
 
-/// Per-frame feature extraction: loudness, onsets, mel bands, partials, novelty.
+/// Per-frame feature extraction: loudness, onsets, mel bands, partials, novelty, pitch.
 pub mod analyzation {
     pub use super::amp_feature::AmpFeature;
+    pub use super::cepstrum_f0::CepstrumF0;
+    pub use super::hps::Hps;
     pub use super::loudness::Loudness;
     pub use super::mel_bands::MelBands;
     pub use super::novelty_feature::Novelty;
     pub use super::onset::{Onset, OnsetFunction};
     pub use super::sine::{Sine, SortBy};
+    pub use super::yin_fft::{PitchResult, YinFft};
 }
 
 /// Spectral transformation: NMF morphing and audio transport.

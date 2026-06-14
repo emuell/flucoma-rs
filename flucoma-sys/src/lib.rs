@@ -33,6 +33,9 @@ cpp! {{
     #include <flucoma/algorithms/public/HPSS.hpp>
     #include <flucoma/algorithms/public/SineExtraction.hpp>
     #include <flucoma/algorithms/public/TransientExtraction.hpp>
+    #include <flucoma/algorithms/public/YINFFT.hpp>
+    #include <flucoma/algorithms/public/CepstrumF0.hpp>
+    #include <flucoma/algorithms/public/HPS.hpp>
     using namespace fluid;
     using namespace fluid::algorithm;
 }}
@@ -510,6 +513,142 @@ pub fn nmf_morph_process_frame(
             auto* cptr = reinterpret_cast<std::complex<double>*>(out_complex);
             FluidTensorView<std::complex<double>, 1> v(cptr, 0, num_bins);
             ptr->processFrame(v, interpolation, seed, FluidDefaultAllocator());
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// YINFFT
+
+pub fn yinfft_create(max_n_bins: FlucomaIndex) -> *mut u8 {
+    unsafe {
+        cpp!([max_n_bins as "ptrdiff_t"] -> *mut u8 as "void*" {
+            return static_cast<void*>(new YINFFT(max_n_bins, FluidDefaultAllocator()));
+        })
+    }
+}
+
+pub fn yinfft_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "YINFFT*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn yinfft_process_frame(
+    ptr: *mut u8,
+    input: *const f64,
+    input_len: FlucomaIndex,
+    output: *mut f64,
+    min_freq: f64,
+    max_freq: f64,
+    sample_rate: f64,
+) {
+    unsafe {
+        cpp!([
+            ptr as "YINFFT*",
+            input as "const double*", input_len as "ptrdiff_t",
+            output as "double*",
+            min_freq as "double", max_freq as "double", sample_rate as "double"
+        ] {
+            FluidTensorView<double, 1> in_v(const_cast<double*>(input), 0, input_len);
+            FluidTensorView<double, 1> out_v(output, 0, 2);
+            ptr->processFrame(in_v, out_v, min_freq, max_freq, sample_rate, FluidDefaultAllocator());
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// CepstrumF0
+
+pub fn cepstrum_f0_create(max_n_bins: FlucomaIndex) -> *mut u8 {
+    unsafe {
+        cpp!([max_n_bins as "ptrdiff_t"] -> *mut u8 as "void*" {
+            return static_cast<void*>(new CepstrumF0(max_n_bins, FluidDefaultAllocator()));
+        })
+    }
+}
+
+pub fn cepstrum_f0_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "CepstrumF0*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn cepstrum_f0_init(ptr: *mut u8, size: FlucomaIndex) {
+    unsafe {
+        cpp!([ptr as "CepstrumF0*", size as "ptrdiff_t"] {
+            ptr->init(size, FluidDefaultAllocator());
+        })
+    }
+}
+
+pub fn cepstrum_f0_process_frame(
+    ptr: *mut u8,
+    input: *const f64,
+    input_len: FlucomaIndex,
+    output: *mut f64,
+    min_freq: f64,
+    max_freq: f64,
+    sample_rate: f64,
+) {
+    unsafe {
+        cpp!([
+            ptr as "CepstrumF0*",
+            input as "const double*", input_len as "ptrdiff_t",
+            output as "double*",
+            min_freq as "double", max_freq as "double", sample_rate as "double"
+        ] {
+            FluidTensorView<double, 1> in_v(const_cast<double*>(input), 0, input_len);
+            FluidTensorView<double, 1> out_v(output, 0, 2);
+            ptr->processFrame(in_v, out_v, min_freq, max_freq, sample_rate, FluidDefaultAllocator());
+        })
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// HPS
+
+pub fn hps_create() -> *mut u8 {
+    unsafe {
+        cpp!([] -> *mut u8 as "void*" {
+            return static_cast<void*>(new HPS());
+        })
+    }
+}
+
+pub fn hps_destroy(ptr: *mut u8) {
+    unsafe {
+        cpp!([ptr as "HPS*"] {
+            delete ptr;
+        })
+    }
+}
+
+pub fn hps_process_frame(
+    ptr: *mut u8,
+    input: *const f64,
+    input_len: FlucomaIndex,
+    output: *mut f64,
+    n_harmonics: FlucomaIndex,
+    min_freq: f64,
+    max_freq: f64,
+    sample_rate: f64,
+) {
+    unsafe {
+        cpp!([
+            ptr as "HPS*",
+            input as "const double*", input_len as "ptrdiff_t",
+            output as "double*",
+            n_harmonics as "ptrdiff_t",
+            min_freq as "double", max_freq as "double", sample_rate as "double"
+        ] {
+            FluidTensorView<double, 1> in_v(const_cast<double*>(input), 0, input_len);
+            FluidTensorView<double, 1> out_v(output, 0, 2);
+            ptr->processFrame(in_v, out_v, n_harmonics, min_freq, max_freq, sample_rate, FluidDefaultAllocator());
         })
     }
 }
