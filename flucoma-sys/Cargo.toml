@@ -7,9 +7,9 @@ license = "BSD-3-Clause"
 links = "flucoma"
 
 [dependencies]
-cpp = "^0.5"
+cpp = "0.5"
 
 [build-dependencies]
-cc = "^1.2"
-cmake = "^0.1"
-cpp_build = "^0.5"
+cc = "1.4"
+cmake = "0.1"
+cpp_build = "0.5"
