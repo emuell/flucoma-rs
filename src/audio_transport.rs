@@ -165,6 +165,26 @@ mod tests {
     }
 
     #[test]
+    /// Tests if flucoma-sys\patches\audio-transport-nan.patch is applied
+    fn audio_transport_empty_bins_give_finite_output() {
+        use std::f64::consts::PI;
+        let win = 2048usize;
+        // Nyquist only: the windowed frame's DC bin is exactly zero
+        let nyquist: Vec<f64> = (0..win)
+            .map(|i| if i % 2 == 0 { 1.0 } else { -1.0 })
+            .collect();
+        let sine: Vec<f64> = (0..win)
+            .map(|i| (2.0 * PI * i as f64 / win as f64).sin())
+            .collect();
+        let mut at = AudioTransport::new(win, win * 4, win / 2).unwrap();
+        for (in1, in2) in [(&nyquist, &nyquist), (&nyquist, &sine), (&sine, &nyquist)] {
+            let (audio, _) = at.process_frame(in1, in2, 0.5);
+            assert!(audio.iter().all(|v| v.is_finite()));
+            assert!(audio.iter().any(|&v| v != 0.0));
+        }
+    }
+
+    #[test]
     fn audio_transport_output_has_correct_shape() {
         use std::f64::consts::PI;
         let win = 1024usize;

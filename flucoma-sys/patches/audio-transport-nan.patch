@@ -1,0 +1,33 @@
+diff --git a/include/flucoma/algorithms/public/AudioTransport.hpp b/include/flucoma/algorithms/public/AudioTransport.hpp
+index 4c812461..e07277f8 100644
+--- a/include/flucoma/algorithms/public/AudioTransport.hpp
++++ b/include/flucoma/algorithms/public/AudioTransport.hpp
+@@ -226,10 +226,16 @@ public:
+     phase1 = in1.arg().real();
+     ScopedEigenMap<ArrayXd> phase2(in2.size(), alloc);
+     phase2 = in2.arg().real();
++    // Empty bins, e.g. the DC bin of a signal without DC, have no frequency to
++    // reassign: dividing by them yields NaN
+     ScopedEigenMap<ArrayXd> reasignedW1(in1.size(), alloc);
+-    reasignedW1 = mBinFreqs.head(in1.size()) - (in1Dh / in1).imag();
++    reasignedW1 = (mag1 > 0).select(
++        mBinFreqs.head(in1.size()) - (in1Dh / in1).imag(),
++        mBinFreqs.head(in1.size()));
+     ScopedEigenMap<ArrayXd> reasignedW2(in2.size(), alloc);
+-    reasignedW2 = mBinFreqs.head(in2.size()) - (in2Dh / in2).imag();
++    reasignedW2 = (mag2 > 0).select(
++        mBinFreqs.head(in2.size()) - (in2Dh / in2).imag(),
++        mBinFreqs.head(in2.size()));
+     ScopedEigenMap<ArrayXd> newAmplitudes(mBins, alloc);
+     newAmplitudes.setZero();
+     ScopedEigenMap<ArrayXd> newPhases(mBins, alloc);
+@@ -241,6 +247,9 @@ public:
+     TransportMatrix matrix = computeTransportMatrix(s1, s2, alloc);
+     for (auto t : matrix)
+     {
++      // Moving no mass places nothing, and its segments may have no mass to
++      // scale by
++      if (std::get<2>(t) <= 0) continue;
+       SpetralMass m1 = s1[asUnsigned(std::get<0>(t))];
+       SpetralMass m2 = s2[asUnsigned(std::get<1>(t))];
+       index  interpolatedBin = std::lrint((1 - interpolation) * m1.centerBin +

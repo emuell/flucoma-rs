@@ -1,22 +1,37 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // -------------------------------------------------------------------------------------------------
 
 fn main() {
     println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=patches/");
     println!("cargo:rerun-if-changed=../vendor/flucoma-core/include/");
 
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let flucoma_dir = manifest_dir.join("..").join("vendor").join("flucoma-core");
+
+    // -- apply patches to a copy of flucoma-core's headers
+
+    let flucoma_dir_patched = out_dir.join("flucoma-core");
+    if flucoma_dir_patched.exists() {
+        fs::remove_dir_all(&flucoma_dir_patched)
+            .expect("failed to clear patched flucoma-core headers");
+    }
+    copy_dir(
+        &flucoma_dir.join("include"),
+        &flucoma_dir_patched.join("include"),
+    );
+    apply_patches(&manifest_dir.join("patches"), &flucoma_dir_patched);
+
+    // -- cmake configure + build ALL_BUILD
 
     let profile = match std::env::var("PROFILE").as_deref() {
         Ok("release") => "Release",
         _ => "RelWithDebInfo",
     };
-
-    // -- cmake configure + build ALL_BUILD
 
     let mut cmake_config = cmake::Config::new(&flucoma_dir);
     cmake_config
@@ -82,7 +97,7 @@ fn main() {
     build
         .cpp(true)
         .static_crt(false) // match flucoma-core settings
-        .include(flucoma_dir.join("include"))
+        .include(flucoma_dir_patched.join("include"))
         .include(&eigen_include)
         .include(&hiss_include)
         .include(&spectra_include)
@@ -108,6 +123,60 @@ fn main() {
         .flag_if_supported("/std:c++17")
         .flag_if_supported("-std=c++17")
         .build("src/lib.rs");
+}
+
+// -------------------------------------------------------------------------------------------------
+
+/// Recursively copy the directory `from` to `to`.
+fn copy_dir(from: &Path, to: &Path) {
+    fs::create_dir_all(to).unwrap_or_else(|e| panic!("failed to create {}: {}", to.display(), e));
+    for entry in fs::read_dir(from)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", from.display(), e))
+        .flatten()
+    {
+        let target = to.join(entry.file_name());
+        if entry.path().is_dir() {
+            copy_dir(&entry.path(), &target);
+        } else {
+            fs::copy(entry.path(), &target)
+                .unwrap_or_else(|e| panic!("failed to copy {}: {}", entry.path().display(), e));
+        }
+    }
+}
+
+/// Apply all `*.patch` files in `patches_dir`, in name order, to the files below `root`.
+/// Each patch must change a single file, with git style `a/` and `b/` path prefixes.
+fn apply_patches(patches_dir: &Path, root: &Path) {
+    let mut patches: Vec<PathBuf> = fs::read_dir(patches_dir)
+        .unwrap_or_else(|e| panic!("failed to read {}: {}", patches_dir.display(), e))
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| {
+            path.extension()
+                .is_some_and(|extension| extension == "patch")
+        })
+        .collect();
+    patches.sort();
+
+    for patch_path in patches {
+        let patch_text = fs::read_to_string(&patch_path)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", patch_path.display(), e));
+        let patch = diffy::Patch::from_str(&patch_text)
+            .unwrap_or_else(|e| panic!("failed to parse {}: {}", patch_path.display(), e));
+        let target = patch
+            .modified()
+            .and_then(|name| name.strip_prefix("b/"))
+            .map(|name| root.join(name))
+            .unwrap_or_else(|| panic!("{} names no b/ target file", patch_path.display()));
+        // Checkouts on Windows may have turned the headers' line endings into CRLF
+        let original = fs::read_to_string(&target)
+            .unwrap_or_else(|e| panic!("failed to read {}: {}", target.display(), e))
+            .replace("\r\n", "\n");
+        let patched = diffy::apply(&original, &patch)
+            .unwrap_or_else(|e| panic!("failed to apply {}: {}", patch_path.display(), e));
+        fs::write(&target, patched)
+            .unwrap_or_else(|e| panic!("failed to write {}: {}", target.display(), e));
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
